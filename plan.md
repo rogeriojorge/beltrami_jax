@@ -415,7 +415,6 @@ What exists:
 What does not exist yet:
 
 - hosted Read the Docs project configuration outside the repository
-- confirmation of the first GitHub Actions run after the workflow is pushed
 
 Known resolved inconsistency:
 
@@ -616,7 +615,6 @@ Current configured state:
 Still needed:
 
 - broader fixture coverage beyond the first dumped system
-- verification of the workflow on GitHub after the example-test portability fix
 
 ## 13. Documentation Plan
 
@@ -688,15 +686,14 @@ Concrete near-term solver tasks:
 
 The next concrete tasks, in priority order, are:
 
-1. Push the example-test portability fix, then confirm the GitHub Actions run is green.
-2. Export at least one additional SPEC fixture:
+1. Export at least one additional SPEC fixture:
    - different `mu`
    - preferably one vacuum case
-3. Add parametrized multi-fixture tests.
-4. Add richer solver diagnostics and conditioning checks.
-5. Decide whether to package a docs-specific extra in `pyproject.toml` instead of relying on `docs/requirements.txt`.
-6. Enable and verify the hosted Read the Docs project.
-7. Keep `plan.md` and the repository in sync as new work lands.
+2. Add parametrized multi-fixture tests.
+3. Add richer solver diagnostics and conditioning checks.
+4. Decide whether to package a docs-specific extra in `pyproject.toml` instead of relying on `docs/requirements.txt`.
+5. Enable and verify the hosted Read the Docs project.
+6. Keep `plan.md` and the repository in sync as new work lands.
 
 ## 16. Open Gaps and Risks
 
@@ -704,7 +701,6 @@ Open gaps:
 
 - only one dumped reference system is currently packaged
 - hosted docs are not yet verified live
-- CI has not yet been observed green after the example-test portability fix
 
 Technical risks:
 
@@ -908,6 +904,14 @@ Validation results after the fix:
   - outcome:
     - `10 passed in 4.44s`
     - `Total coverage: 100.00%`
+
+Remote CI result:
+
+- GitHub Actions run `24568541530`
+- outcome:
+  - docs job passed
+  - test job on Python 3.11 passed
+  - test job on Python 3.13 passed
 
 ## 19. Notes For Future Updates
 

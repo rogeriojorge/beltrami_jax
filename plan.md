@@ -61,7 +61,7 @@ Reference code:
 
 - SPEC remote: [https://github.com/PrincetonUniversity/SPEC](https://github.com/PrincetonUniversity/SPEC)
 - Local checkout: `/Users/rogerio/local/SPEC`
-- SPEC build directory: `/Users/rogerio/local/SPEC/build/build`
+- SPEC CMake build directory: `/Users/rogerio/local/SPEC/build`
 - SPEC executable: `/Users/rogerio/local/SPEC/build/build/bin/xspec`
 
 Reference run artifacts:
@@ -87,11 +87,38 @@ Reference run artifacts:
   - `G3V01L0Fi.dump.lvol1.matrix.txt`
   - `G3V01L0Fi.dump.lvol1.rhs.txt`
   - `G3V01L0Fi.dump.lvol1.solution.txt`
+  - `G1V03L0Fi.sp`
+  - `G1V03L0Fi.dump.sp`
+  - `G1V03L0Fi.dump.lvol2.meta.txt`
+  - `G1V03L0Fi.dump.lvol2.dma.txt`
+  - `G1V03L0Fi.dump.lvol2.dmd.txt`
+  - `G1V03L0Fi.dump.lvol2.dmb.txt`
+  - `G1V03L0Fi.dump.lvol2.dmg.txt`
+  - `G1V03L0Fi.dump.lvol2.matrix.txt`
+  - `G1V03L0Fi.dump.lvol2.rhs.txt`
+  - `G1V03L0Fi.dump.lvol2.solution.txt`
+  - `G3V02L0Fr_LU.sp`
+  - `G3V02L0Fr_LU.dump.lvol2.meta.txt`
+  - `G3V02L0Fr_LU.dump.lvol2.dma.txt`
+  - `G3V02L0Fr_LU.dump.lvol2.dmd.txt`
+  - `G3V02L0Fr_LU.dump.lvol2.dmb.txt`
+  - `G3V02L0Fr_LU.dump.lvol2.dmg.txt`
+  - `G3V02L0Fr_LU.dump.lvol2.matrix.txt`
+  - `G3V02L0Fr_LU.dump.lvol2.rhs.txt`
+  - `G3V02L0Fr_LU.dump.lvol2.solution.txt`
+  - `G3V02L0Fr_LU.dump.lvol3.meta.txt`
+  - `G3V02L0Fr_LU.dump.lvol3.dma.txt`
+  - `G3V02L0Fr_LU.dump.lvol3.dmd.txt`
+  - `G3V02L0Fr_LU.dump.lvol3.dmb.txt`
+  - `G3V02L0Fr_LU.dump.lvol3.dmg.txt`
+  - `G3V02L0Fr_LU.dump.lvol3.matrix.txt`
+  - `G3V02L0Fr_LU.dump.lvol3.rhs.txt`
+  - `G3V02L0Fr_LU.dump.lvol3.solution.txt`
 
 Environment:
 
 - Current working shell used during development: `zsh`
-- Current date when this file was written: `2026-04-16`
+- Current date when this file was written: `2026-04-17`
 - Local timezone at that time: `America/Chicago`
 
 ## 4. What SPEC Is Doing
@@ -399,11 +426,11 @@ What exists:
 - dense JAX solve
 - helper operators
 - SPEC text-dump loader
-- packaged SPEC regression fixture under `src/beltrami_jax/data/`
+- packaged SPEC regression fixtures under `src/beltrami_jax/data/`
 - package data module `src/beltrami_jax/data/__init__.py`
 - expanded `README.md` with installation, validation workflow, and figures
 - examples
-- tests passing locally against the packaged SPEC fixture
+- tests passing locally against multiple packaged SPEC fixtures
 - editable install validated locally
 - documentation tree under `docs/`
 - `.readthedocs.yaml`
@@ -411,6 +438,19 @@ What exists:
 - GitHub Actions CI workflow source under `.github/workflows/`
 - generated figure assets under `docs/_static/`
 - local Sphinx build validated with warnings treated as errors
+- fixture support for both plasma and vacuum-region RHS reconstruction
+
+Currently packaged fixtures:
+
+- `src/beltrami_jax/data/g3v01l0fi_lvol1.npz`
+  - toroidal fixed-boundary plasma region
+  - size `361`
+- `src/beltrami_jax/data/g1v03l0fi_lvol2.npz`
+  - compact cylindrical plasma region with nonzero `mu`
+  - size `51`
+- `src/beltrami_jax/data/g3v02l0fr_lu_lvol3.npz`
+  - toroidal free-boundary vacuum region
+  - size `1548`
 
 What does not exist yet:
 
@@ -524,8 +564,10 @@ What worked:
 - baseline SPEC run
 - verbose SPEC run
 - dumping a dense reference linear system from SPEC
+- extending the local SPEC dump hook to select a target volume and export `dMG` / `is_vacuum`
 - initial JAX package scaffolding
 - packaging the dumped SPEC system into a repository fixture
+- packaging multiple dumped SPEC systems into repository fixtures
 - editable install with `pip install -e '.[dev]'`
 - local test execution at 100 percent coverage
 - Sphinx documentation tree and Read the Docs configuration
@@ -538,6 +580,9 @@ What did not work:
 - plain initial SPEC clone path failed with packfile/index-pack problems
 - initial SPEC runtime without legacy Fortran mode hit format-related issues
 - first fixture-generation attempt failed because `reference.py` used `Path.with_suffix`, which stripped the `.lvol1` portion from dump prefixes
+- first additional nonzero-`mu` candidate `G1V03L2Fi.001.sp` did not run as shipped because `LBeltrami=2` in that input requires `Lconstraint=2`
+- matrix-free GMRES cases do not emit dense matrix dumps through the current SPEC hook, so dump-only copies had to force `Lmatsolver = 1`
+- first free-boundary dump target (`lvol = 2` in `G3V02L0Fr_LU`) was not the vacuum region; the actual vacuum system is `lvol = 3`
 - first strict docs build failed because autodoc tried to render imported JAX aliases such as `Array`; fixed by excluding those imported symbols from the API page
 
 Why this matters:
@@ -614,7 +659,7 @@ Current configured state:
 
 Still needed:
 
-- broader fixture coverage beyond the first dumped system
+- broader fixture coverage beyond the current three dumped systems
 
 ## 13. Documentation Plan
 
@@ -669,7 +714,7 @@ The staged implementation plan is:
 1. Finish the current linear regression workflow.
 2. Add README, docs, and Read the Docs configuration. (done)
 3. Add CI workflow with coverage reporting. (done)
-4. Add more SPEC fixtures and broader validations.
+4. Add more SPEC fixtures and broader validations. (partially done)
 5. Expand the solver API for integration use.
 6. Add richer solver diagnostics and conditioning tools.
 7. Benchmark and, if justified, introduce alternative JAX linear algebra backends.
@@ -680,27 +725,26 @@ Concrete near-term solver tasks:
 - add richer residual/conditioning diagnostics
 - add a higher-level public solve function for integration
 - add synthetic analytic test cases
-- add multiple-fixture parametrized tests
+- add more multi-fixture parametrized tests as new SPEC dumps are added
 
 ## 15. Immediate Next Steps
 
 The next concrete tasks, in priority order, are:
 
-1. Export at least one additional SPEC fixture:
-   - different `mu`
-   - preferably one vacuum case
-2. Add parametrized multi-fixture tests.
-3. Add richer solver diagnostics and conditioning checks.
-4. Decide whether to package a docs-specific extra in `pyproject.toml` instead of relying on `docs/requirements.txt`.
-5. Enable and verify the hosted Read the Docs project.
+1. Add richer solver diagnostics and conditioning checks.
+2. Decide whether to package a docs-specific extra in `pyproject.toml` instead of relying on `docs/requirements.txt`.
+3. Enable and verify the hosted Read the Docs project.
+4. Add at least one more shaped 3D plasma fixture from SPEC, ideally one closer to the future SPECTRE target cases.
+5. Consider a lightweight benchmark path so fixture-regression confidence is paired with basic performance tracking.
 6. Keep `plan.md` and the repository in sync as new work lands.
 
 ## 16. Open Gaps and Risks
 
 Open gaps:
 
-- only one dumped reference system is currently packaged
 - hosted docs are not yet verified live
+- fixture coverage is still narrow relative to the full SPEC branch space
+- no QA/QH or SPECTRE-like shaping cases are yet packaged
 
 Technical risks:
 
@@ -717,7 +761,7 @@ Project risk:
 
 Current honest status:
 
-- the linear solve kernel is implemented and regression-tested against one dumped SPEC system
+- the linear solve kernel is implemented and regression-tested against multiple dumped SPEC systems, including a nonzero-`mu` plasma case and a vacuum case with nonzero `dMG`
 - the repository now includes docs sources, figures, and CI definitions, but it is not yet complete enough to call finished
 
 ## 17. Restart From Scratch Checklist
@@ -737,14 +781,18 @@ If all local context were lost, the restart procedure should be:
    - ensure `-std=legacy` is used
 5. Run the shipped SPEC example `G3V01L0Fi.001.sp`.
 6. Add or reapply the temporary `SPEC_DUMP_LINEAR_SYSTEM` instrumentation if fixture extraction is needed.
-7. Run the dump case to export the dense matrices and vectors.
-8. Create the Python virtual environment in `beltrami_jax/.venv`.
-9. Install `jax`, `pytest`, `pytest-cov`, `sphinx`, `myst-parser`, `furo`, `matplotlib`, `numpy`, and `build`.
-10. Package the dumped fixture into `src/beltrami_jax/data/`.
-11. Add `src/beltrami_jax/data/__init__.py` so packaged resources are importable.
-12. Run `pytest`.
-13. Fill in README, docs, and CI.
-14. Commit and push.
+   - include `SPEC_DUMP_LINEAR_SYSTEM_LVOL`
+   - include vacuum metadata and `dMG` dumping
+7. For matrix-free SPEC inputs, create dump-only copies that set `Lmatsolver = 1`.
+8. Run the dump cases to export dense matrices and vectors.
+9. Create the Python virtual environment in `beltrami_jax/.venv`.
+10. Install `jax`, `pytest`, `pytest-cov`, `sphinx`, `myst-parser`, `furo`, `matplotlib`, `numpy`, and `build`.
+11. Package the dumped fixtures into `src/beltrami_jax/data/`.
+12. Add `src/beltrami_jax/data/__init__.py` so packaged resources are importable.
+13. Run `pytest`.
+14. Run `sphinx -W`.
+15. Fill in README, docs, and CI.
+16. Commit and push.
 
 ## 18. Chronological Log
 
@@ -912,6 +960,69 @@ Remote CI result:
   - docs job passed
   - test job on Python 3.11 passed
   - test job on Python 3.13 passed
+
+### 2026-04-17: multi-fixture SPEC regression expansion
+
+Completed:
+
+- patched the local SPEC dump hook in `/Users/rogerio/local/SPEC/src/mp00ac.f90`
+  - added support for `SPEC_DUMP_LINEAR_SYSTEM_LVOL`
+  - added `is_vacuum` metadata to `.meta.txt`
+  - added `.dmg.txt` output so vacuum-region RHS reconstruction can be validated exactly
+- rebuilt SPEC from:
+  - `/Users/rogerio/local/SPEC/build`
+- exported a new compact nonzero-`mu` plasma-region dump from:
+  - input file: `/Users/rogerio/local/SPEC/ci/G1V03L0Fi/G1V03L0Fi.sp`
+  - dump-only copy: `/Users/rogerio/local/SPEC_runs/G1V03L0Fi.dump.sp`
+  - region: `lvol = 2`
+  - matrix size: `51`
+  - `mu = 1.0000000000000009e-01`
+  - `psi = (3.1830988618379082e-02, 0.0)`
+- exported a new free-boundary vacuum-region dump from:
+  - input file: `/Users/rogerio/local/SPEC/ci/toroidal_freeboundary_vacuum/G3V02L0Fr_LU.sp`
+  - region: `lvol = 3`
+  - matrix size: `1548`
+  - `mu = 0.0`
+  - `psi = (2.0806176444792901e-01, 1.3201381096868081e-02)`
+  - `is_vacuum = 1`
+- packaged new fixtures into the repository:
+  - `/Users/rogerio/local/beltrami_jax/src/beltrami_jax/data/g1v03l0fi_lvol2.npz`
+  - `/Users/rogerio/local/beltrami_jax/src/beltrami_jax/data/g3v02l0fr_lu_lvol3.npz`
+- updated `beltrami_jax.reference` and `tools/build_spec_fixture.py` to preserve vacuum metadata and optional `d_mg`
+- expanded regression tests to cover all packaged fixtures and both legacy and new text-dump formats
+- updated `README.md`, `docs/validation.md`, and `docs/limitations.md` to reflect the broader fixture set
+
+Important failed attempts and decisions:
+
+- `G1V03L2Fi.001.sp` looked attractive as a small nonzero-`mu` candidate, but it failed as shipped because its `LBeltrami=2` setup requires `Lconstraint=2`
+- `G1V03L0Fi.sp` ran successfully but did not emit a dump until a dump-only copy forced `Lmatsolver = 1`
+- for the free-boundary toroidal vacuum case, `lvol = 2` was not the vacuum region despite `Nvol = 2`
+- the correct vacuum-system dump for that case is `lvol = 3`, because SPEC carries `Mvol = 3` there
+
+Exact commands used:
+
+- rebuild SPEC:
+  - `cmake --build /Users/rogerio/local/SPEC/build -j4`
+- dump compact plasma fixture:
+  - `env SPEC_DUMP_LINEAR_SYSTEM=/Users/rogerio/local/SPEC_runs/G1V03L0Fi.dump.lvol2 SPEC_DUMP_LINEAR_SYSTEM_LVOL=2 OMP_NUM_THREADS=1 /Users/rogerio/local/SPEC/build/build/bin/xspec /Users/rogerio/local/SPEC_runs/G1V03L0Fi.dump.sp`
+- dump free-boundary vacuum fixture:
+  - `env SPEC_DUMP_LINEAR_SYSTEM=/Users/rogerio/local/SPEC_runs/G3V02L0Fr_LU.dump.lvol3 SPEC_DUMP_LINEAR_SYSTEM_LVOL=3 OMP_NUM_THREADS=1 /Users/rogerio/local/SPEC/build/build/bin/xspec /Users/rogerio/local/SPEC_runs/G3V02L0Fr_LU.sp`
+- package plasma fixture:
+  - `PYTHONPATH=src ./.venv/bin/python tools/build_spec_fixture.py /Users/rogerio/local/SPEC_runs/G1V03L0Fi.dump.lvol2 /Users/rogerio/local/beltrami_jax/src/beltrami_jax/data/g1v03l0fi_lvol2.npz`
+- package vacuum fixture:
+  - `PYTHONPATH=src ./.venv/bin/python tools/build_spec_fixture.py /Users/rogerio/local/SPEC_runs/G3V02L0Fr_LU.dump.lvol3 /Users/rogerio/local/beltrami_jax/src/beltrami_jax/data/g3v02l0fr_lu_lvol3.npz`
+
+Validation results:
+
+- tests:
+  - `./.venv/bin/python -m pytest`
+  - outcome:
+    - `15 passed in 5.19s`
+    - `Total coverage: 100.00%`
+- docs build:
+  - `./.venv/bin/python -m sphinx -b html -W docs docs/_build/html`
+  - outcome:
+    - build succeeded
 
 ## 19. Notes For Future Updates
 

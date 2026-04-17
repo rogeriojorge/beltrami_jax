@@ -25,9 +25,9 @@ The current implementation supports:
 
 It does not yet cover every branch and auxiliary matrix path present in SPEC's legacy Fortran, such as coordinate-singularity-specific terms and matrix-free solver paths.
 
-### Single packaged SPEC fixture
+### Limited fixture diversity
 
-Only one dumped SPEC system is currently committed in the repository. That is enough for an initial exact-regression milestone, but not enough for broad confidence across geometry, resolution, and region type.
+The repository now includes multiple dumped SPEC systems, including a nonzero-`mu` plasma fixture and a free-boundary vacuum fixture. That is enough for a stronger regression baseline, but it is still not broad confidence across all geometries, resolutions, and solver branches present in SPEC.
 
 ## Planned next steps
 
@@ -53,6 +53,7 @@ Once the dense regression baseline is stable across more fixtures, the next tech
 It is easy to overstate progress on a project like this. The correct current statement is:
 
 - the dense linear Beltrami kernel has been reproduced and regression-tested against one SPEC dump
+- the dense linear Beltrami kernel has been reproduced and regression-tested against multiple SPEC dumps, including plasma and vacuum cases
 - the larger equilibrium workflow has not yet been ported
 
 That distinction matters for both scientific correctness and future integration planning.

@@ -11,8 +11,9 @@ from beltrami_jax.solver import solve_from_components, solve_parameter_scan
 from beltrami_jax.types import BeltramiLinearSystem
 
 
-def test_spec_fixture_solution_matches_dump() -> None:
-    reference = load_packaged_reference()
+@pytest.mark.parametrize("name", ["g3v01l0fi_lvol1", "g1v03l0fi_lvol2", "g3v02l0fr_lu_lvol3"])
+def test_spec_fixture_solution_matches_dump(name: str) -> None:
+    reference = load_packaged_reference(name)
     result = solve_from_components(reference.system)
     np.testing.assert_allclose(np.asarray(result.solution), np.asarray(reference.expected_solution), rtol=1e-11, atol=1e-11)
     assert float(result.relative_residual_norm) < 1e-11

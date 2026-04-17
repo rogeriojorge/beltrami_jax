@@ -11,8 +11,7 @@ from beltrami_jax.reference import load_spec_text_dump
 def build_fixture(prefix: Path, output: Path) -> None:
     reference = load_spec_text_dump(prefix)
     output.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        output,
+    fixture_kwargs = dict(
         d_ma=np.asarray(reference.system.d_ma),
         d_md=np.asarray(reference.system.d_md),
         d_mb=np.asarray(reference.system.d_mb),
@@ -25,6 +24,10 @@ def build_fixture(prefix: Path, output: Path) -> None:
         label=np.asarray(reference.system.label),
         source=np.asarray(reference.source),
     )
+    if reference.system.d_mg is not None:
+        fixture_kwargs["d_mg"] = np.asarray(reference.system.d_mg)
+    fixture_kwargs["is_vacuum"] = np.asarray(int(reference.system.is_vacuum), dtype=np.int8)
+    np.savez_compressed(output, **fixture_kwargs)
     print(f"Wrote {output}")
 
 

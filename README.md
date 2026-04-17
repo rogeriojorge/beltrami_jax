@@ -46,7 +46,7 @@ Today the repository includes:
 - a dense JAX solve path with residual reporting
 - vectorized parameter scans in `mu`
 - autodifferentiation through the solved state
-- a packaged SPEC regression fixture
+- packaged SPEC regression fixtures covering plasma and vacuum branches
 - tests that compare the JAX solve to the dumped SPEC system
 
 The current implementation intentionally does not yet include:
@@ -130,7 +130,13 @@ Vectorized energy scan around the reference `mu`:
 
 ## Validation against SPEC
 
-The current regression workflow uses dense matrices and vectors dumped from a local SPEC build. The packaged reference fixture comes from a `G3V01L0Fi` case and is used to verify:
+The current regression workflow uses dense matrices and vectors dumped from a local SPEC build. The packaged references currently include:
+
+- `g3v01l0fi_lvol1`: toroidal fixed-boundary plasma region, size `361`
+- `g1v03l0fi_lvol2`: compact cylindrical fixed-boundary plasma region with nonzero `mu`, size `51`
+- `g3v02l0fr_lu_lvol3`: toroidal free-boundary vacuum region with nonzero `d_mg`, size `1548`
+
+Together these fixtures verify:
 
 - operator reconstruction
 - right-hand-side reconstruction
@@ -163,6 +169,7 @@ The corresponding SPEC dump is expected to provide:
 - `.dma.txt`
 - `.dmd.txt`
 - `.dmb.txt`
+- `.dmg.txt` for vacuum-region exports
 - `.matrix.txt`
 - `.rhs.txt`
 - `.solution.txt`

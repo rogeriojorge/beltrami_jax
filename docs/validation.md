@@ -4,19 +4,32 @@
 
 The package is validated against real dense systems exported from SPEC rather than only against synthetic toy matrices. This keeps the implementation anchored to the actual Fortran interface that motivated the JAX port.
 
-## Current reference fixture
+## Current reference fixtures
 
-The first committed fixture comes from a local SPEC run of a `G3V01L0Fi` case. The exported dense system corresponds to:
+The committed fixtures currently cover three dense systems exported from local SPEC runs:
 
-- volume index `lvol = 1`
-- matrix dimension `361`
-- `mu = 0.0`
-- `psi_t = 3.1830988618379069e-01`
-- `psi_p = 0.0`
+- `g3v01l0fi_lvol1`
+  - fixed-boundary toroidal plasma region
+  - `lvol = 1`
+  - matrix dimension `361`
+  - `mu = 0.0`
+- `g1v03l0fi_lvol2`
+  - fixed-boundary cylindrical plasma region
+  - `lvol = 2`
+  - matrix dimension `51`
+  - `mu = 1.0e-1`
+- `g3v02l0fr_lu_lvol3`
+  - free-boundary toroidal vacuum region
+  - `lvol = 3`
+  - matrix dimension `1548`
+  - `mu = 0.0`
+  - `is_vacuum = 1`
 
-The committed compressed fixture lives at:
+The committed compressed fixtures live at:
 
 - `src/beltrami_jax/data/g3v01l0fi_lvol1.npz`
+- `src/beltrami_jax/data/g1v03l0fi_lvol2.npz`
+- `src/beltrami_jax/data/g3v02l0fr_lu_lvol3.npz`
 
 ## How the fixture was generated
 
@@ -32,6 +45,7 @@ Running SPEC with that variable set writes:
 - `.dma.txt`
 - `.dmd.txt`
 - `.dmb.txt`
+- `.dmg.txt`
 - `.matrix.txt`
 - `.rhs.txt`
 - `.solution.txt`
@@ -73,7 +87,7 @@ The test suite verifies:
 
 ### Vacuum branch
 
-- the vacuum right-hand-side path including `d_mg` behaves as expected on a synthetic system
+- the vacuum right-hand-side path including `d_mg` behaves as expected on both a synthetic system and a dumped SPEC vacuum fixture
 
 ### Example smoke tests
 
@@ -93,9 +107,6 @@ The current validation is strong for the implemented dense linear stage, but sti
 
 Remaining validation work includes:
 
-- more than one dumped SPEC fixture
-- at least one vacuum-region fixture from SPEC
-- different matrix sizes and nonzero `mu`
 - performance benchmarks
 - comparisons against later SPECTRE integration points
 

@@ -221,8 +221,8 @@ Completed:
 Important current repo state:
 
 - Initial commit created on `main`
-- Current published commit when last updated:
-  - `2700f2de8e343a0450ca5300995856cf264e4618`
+- To check the current published commit at any time, run:
+  - `git rev-parse HEAD`
 - Branch `main` is pushed to `origin/main`
 
 ### 7.2 SPEC Clone, Build, and Run
@@ -802,9 +802,10 @@ Completed:
 - updated `plan.md` after the initial publish so repository status no longer claimed the repo was uncommitted or unpushed
 - pushed the synchronized plan update
 
-Current head after synchronization:
+Note:
 
-- `2700f2de8e343a0450ca5300995856cf264e4618`
+- do not record a fixed "current HEAD" hash inside this file unless it is part of a dated log entry
+- otherwise the file becomes stale immediately after the next commit
 
 ## 19. Notes For Future Updates
 

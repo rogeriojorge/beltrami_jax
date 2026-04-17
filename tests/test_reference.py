@@ -7,12 +7,15 @@ import pytest
 
 from beltrami_jax.operators import assemble_operator, assemble_rhs
 from beltrami_jax.reference import list_packaged_references, load_packaged_reference, load_spec_text_dump
+from beltrami_jax.diagnostics import compare_against_reference
+from beltrami_jax.solver import solve_from_components
 
 
 PACKAGED_FIXTURE_METADATA = {
     "g1v03l0fi_lvol2": {"size": 51, "volume_index": 2, "is_vacuum": False},
     "g3v01l0fi_lvol1": {"size": 361, "volume_index": 1, "is_vacuum": False},
     "g3v02l0fr_lu_lvol3": {"size": 1548, "volume_index": 3, "is_vacuum": True},
+    "g3v02l1fi_lvol1": {"size": 361, "volume_index": 1, "is_vacuum": False},
 }
 
 
@@ -134,3 +137,20 @@ def test_load_spec_text_dump_requires_dmg_for_vacuum_case(tmp_path: Path) -> Non
 
     with pytest.raises(FileNotFoundError, match="dmg.txt"):
         load_spec_text_dump(prefix)
+
+
+def test_reference_comparison_handles_zero_expected_norm() -> None:
+    reference = load_packaged_reference("g1v03l0fi_lvol2")
+    result = solve_from_components(reference.system)
+    zero_reference = type(reference)(
+        system=reference.system,
+        matrix=reference.matrix * 0.0,
+        rhs=reference.rhs * 0.0,
+        expected_solution=reference.expected_solution * 0.0,
+        volume_index=reference.volume_index,
+        source=reference.source,
+    )
+    comparison = compare_against_reference(zero_reference, result)
+    assert comparison.operator_relative_error > 0.0
+    assert comparison.rhs_relative_error > 0.0
+    assert comparison.solution_relative_error > 0.0

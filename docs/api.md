@@ -35,6 +35,20 @@ This page documents the currently exported public API.
    :exclude-members: Array, ArrayLike
 ```
 
+## Diagnostics helpers
+
+```{eval-rst}
+.. automodule:: beltrami_jax.diagnostics
+   :members:
+```
+
+## Benchmark helpers
+
+```{eval-rst}
+.. automodule:: beltrami_jax.benchmark
+   :members:
+```
+
 ## Fixture loading
 
 ```{eval-rst}
@@ -63,8 +77,10 @@ Outputs:
   - `d_ma`
   - `d_md`
   - `d_mb`
+  - `d_mg` when present in the source dump
   - `mu`
   - `psi`
+  - `is_vacuum`
   - `matrix`
   - `rhs`
   - `solution`

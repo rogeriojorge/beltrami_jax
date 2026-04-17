@@ -41,9 +41,14 @@ def solve_from_components(
 
     residual_norm = jnp.linalg.norm(linear_residual, ord=2)
     rhs_norm = jnp.maximum(jnp.linalg.norm(rhs, ord=2), jnp.asarray(1e-30, dtype=rhs.dtype))
+    operator_norm = jnp.linalg.norm(operator, ord="fro")
+    solution_norm = jnp.linalg.norm(solution, ord=2)
     relative = residual_norm / rhs_norm
 
     if verbose:
+        print(f"[beltrami_jax] operator_fro_norm={float(operator_norm):.8e}")
+        print(f"[beltrami_jax] rhs_norm={float(rhs_norm):.8e}")
+        print(f"[beltrami_jax] solution_norm={float(solution_norm):.8e}")
         print(f"[beltrami_jax] residual_norm={float(residual_norm):.8e}")
         print(f"[beltrami_jax] relative_residual_norm={float(relative):.8e}")
 

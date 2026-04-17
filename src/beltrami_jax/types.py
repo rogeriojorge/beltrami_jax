@@ -82,3 +82,59 @@ class SolveResult:
     relative_residual_norm: Array
     magnetic_energy: Array
     magnetic_helicity: Array
+
+
+@dataclass(frozen=True)
+class SolveDiagnostics:
+    """Post-solve diagnostic summary for a dense Beltrami system."""
+
+    label: str
+    size: int
+    is_vacuum: bool
+    operator_fro_norm: float
+    rhs_l2_norm: float
+    solution_l2_norm: float
+    max_abs_solution: float
+    max_abs_residual: float
+    residual_l2_norm: float
+    relative_residual_norm: float
+    symmetry_defect: float
+    amplification_factor: float
+    condition_number_2: float | None = None
+
+
+@dataclass(frozen=True)
+class ReferenceComparison:
+    """Agreement metrics between a JAX solve and a dumped SPEC reference."""
+
+    label: str
+    size: int
+    volume_index: int
+    operator_relative_error: float
+    rhs_relative_error: float
+    solution_relative_error: float
+    max_abs_solution_error: float
+
+
+@dataclass(frozen=True)
+class SolveBenchmark:
+    """Timing summary for solving a packed Beltrami system."""
+
+    label: str
+    size: int
+    repeats: int
+    compile_and_solve_seconds: float
+    steady_state_seconds: float
+
+
+@dataclass(frozen=True)
+class ParameterScanBenchmark:
+    """Timing summary for a batched `solve_parameter_scan` execution."""
+
+    label: str
+    size: int
+    batch_size: int
+    repeats: int
+    compile_and_solve_seconds: float
+    steady_state_seconds: float
+    per_system_seconds: float

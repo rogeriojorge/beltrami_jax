@@ -6,7 +6,7 @@ The package is validated against real dense systems exported from SPEC rather th
 
 ## Current reference fixtures
 
-The committed fixtures currently cover three dense systems exported from local SPEC runs:
+The committed fixtures currently cover four dense systems exported from local SPEC runs:
 
 - `g3v01l0fi_lvol1`
   - fixed-boundary toroidal plasma region
@@ -18,6 +18,11 @@ The committed fixtures currently cover three dense systems exported from local S
   - `lvol = 2`
   - matrix dimension `51`
   - `mu = 1.0e-1`
+- `g3v02l1fi_lvol1`
+  - fixed-boundary 3D plasma region
+  - `lvol = 1`
+  - matrix dimension `361`
+  - `mu = 1.8189908612531447e-4`
 - `g3v02l0fr_lu_lvol3`
   - free-boundary toroidal vacuum region
   - `lvol = 3`
@@ -29,7 +34,25 @@ The committed compressed fixtures live at:
 
 - `src/beltrami_jax/data/g3v01l0fi_lvol1.npz`
 - `src/beltrami_jax/data/g1v03l0fi_lvol2.npz`
+- `src/beltrami_jax/data/g3v02l1fi_lvol1.npz`
 - `src/beltrami_jax/data/g3v02l0fr_lu_lvol3.npz`
+
+## Validation figures
+
+The repository now commits regenerated publication-style validation assets:
+
+![Validation panel](_static/validation_panel.png)
+
+![Benchmark panel](_static/benchmark_panel.png)
+
+These figures summarize:
+
+- coefficient-level agreement between SPEC and `beltrami_jax`
+- operator, RHS, solution, and residual error metrics
+- condition numbers, symmetry defects, and solution amplification
+- autodiff agreement along a `mu` scan
+- steady-state dense solve timings
+- batched parameter-scan throughput
 
 ## How the fixture was generated
 
@@ -80,10 +103,12 @@ The test suite verifies:
 ### Autodiff
 
 - magnetic energy computed from the solved state is differentiable with respect to `mu`
+- the autodiff tangent is compared against a vmapped energy scan on the 3D plasma fixture
 
 ### Vectorization
 
 - a batched `mu` scan reproduces the scalar solution at the reference `mu`
+- batched parameter-scan timings are tracked as part of the committed benchmark figure
 
 ### Vacuum branch
 
@@ -107,8 +132,8 @@ The current validation is strong for the implemented dense linear stage, but sti
 
 Remaining validation work includes:
 
-- performance benchmarks
 - comparisons against later SPECTRE integration points
+- broader 3D fixture coverage closer to anticipated SPECTRE use cases
 
 ## Why exact dense regression matters
 

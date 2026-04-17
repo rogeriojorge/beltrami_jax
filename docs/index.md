@@ -32,6 +32,7 @@ The repository is intentionally focused on the discrete linear stage of the Belt
 - typed system representation
 - operator and right-hand-side assembly
 - dense JAX solve
+- diagnostics and benchmark helpers
 - vectorized parameter scans
 - autodifferentiation through solved states
 - regression testing against SPEC fixtures

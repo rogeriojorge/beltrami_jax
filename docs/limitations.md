@@ -33,11 +33,11 @@ The repository now includes multiple dumped SPEC systems, including a nonzero-`m
 
 The near-term roadmap is:
 
-1. add full documentation and Read the Docs integration
-2. add CI for tests and docs builds
-3. add more dumped SPEC fixtures
-4. add richer diagnostics such as conditioning indicators
-5. add a higher-level integration-oriented solve API
+1. enable and verify the hosted Read the Docs project
+2. add more dumped SPEC fixtures
+3. add a higher-level integration-oriented solve API
+4. broaden benchmarks beyond the current dense-regression fixture set
+5. evaluate sparse and matrix-free directions once the dense baseline is frozen
 
 ## Medium-term technical directions
 
@@ -52,7 +52,6 @@ Once the dense regression baseline is stable across more fixtures, the next tech
 
 It is easy to overstate progress on a project like this. The correct current statement is:
 
-- the dense linear Beltrami kernel has been reproduced and regression-tested against one SPEC dump
 - the dense linear Beltrami kernel has been reproduced and regression-tested against multiple SPEC dumps, including plasma and vacuum cases
 - the larger equilibrium workflow has not yet been ported
 

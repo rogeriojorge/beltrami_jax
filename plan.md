@@ -425,6 +425,8 @@ What exists:
 - typed linear-system API
 - dense JAX solve
 - helper operators
+- diagnostics helpers for operator quality and agreement metrics
+- benchmark helpers for dense solves and batched parameter scans
 - SPEC text-dump loader
 - packaged SPEC regression fixtures under `src/beltrami_jax/data/`
 - package data module `src/beltrami_jax/data/__init__.py`
@@ -439,6 +441,7 @@ What exists:
 - generated figure assets under `docs/_static/`
 - local Sphinx build validated with warnings treated as errors
 - fixture support for both plasma and vacuum-region RHS reconstruction
+- committed publication-style validation and benchmark panels under `docs/_static/`
 
 Currently packaged fixtures:
 
@@ -448,6 +451,9 @@ Currently packaged fixtures:
 - `src/beltrami_jax/data/g1v03l0fi_lvol2.npz`
   - compact cylindrical plasma region with nonzero `mu`
   - size `51`
+- `src/beltrami_jax/data/g3v02l1fi_lvol1.npz`
+  - fixed-boundary 3D plasma region
+  - size `361`
 - `src/beltrami_jax/data/g3v02l0fr_lu_lvol3.npz`
   - toroidal free-boundary vacuum region
   - size `1548`
@@ -455,6 +461,7 @@ Currently packaged fixtures:
 What does not exist yet:
 
 - hosted Read the Docs project configuration outside the repository
+- a live hosted docs deployment
 
 Known resolved inconsistency:
 
@@ -500,6 +507,10 @@ Source package:
   - operator and RHS assembly plus functionals
 - `src/beltrami_jax/solver.py`
   - JAX dense solve and vectorized parameter scan
+- `src/beltrami_jax/diagnostics.py`
+  - operator-quality and reference-agreement summaries
+- `src/beltrami_jax/benchmark.py`
+  - timing helpers for dense solves and batched scans
 - `src/beltrami_jax/reference.py`
   - SPEC fixture loading
 - `src/beltrami_jax/data/`
@@ -513,13 +524,15 @@ Examples:
   - batched `mu` scan
 - `examples/autodiff_mu.py`
   - differentiate solved energy with respect to `mu`
+- `examples/benchmark_fixtures.py`
+  - quick timing summary for one packaged fixture
 
 Tests:
 
 - `tests/test_reference.py`
   - operator and RHS reconstruction from fixture
 - `tests/test_solver.py`
-  - regression against SPEC solution, residuals, autodiff, batched solves, vacuum path
+  - regression against SPEC solution, residuals, autodiff, batched solves, diagnostics, benchmarks, vacuum path
 - `tests/test_examples.py`
   - smoke-test example scripts using the repository virtual environment
 
@@ -527,6 +540,8 @@ Tools:
 
 - `tools/build_spec_fixture.py`
   - convert dumped SPEC text files into packaged compressed fixture data
+- `tools/generate_validation_assets.py`
+  - regenerate the committed validation and benchmark figure panels
 
 Documentation:
 
@@ -551,7 +566,7 @@ Documentation:
 - `docs/requirements.txt`
   - documentation build dependencies
 - `docs/_static/`
-  - committed figure assets used by the docs and README
+  - committed figure assets used by the docs and README, including validation and benchmark panels
 
 ## 10. What Worked, What Did Not, and Why
 
@@ -570,8 +585,10 @@ What worked:
 - packaging multiple dumped SPEC systems into repository fixtures
 - editable install with `pip install -e '.[dev]'`
 - local test execution at 100 percent coverage
+- docs-only editable install path through `pip install -e '.[docs]'`
 - Sphinx documentation tree and Read the Docs configuration
 - generated figures from the packaged-fixture examples
+- generated publication-style validation and benchmark panels from committed fixture data
 - local docs build with `sphinx -W`
 - GitHub Actions workflow definition for tests and docs builds
 
@@ -588,7 +605,7 @@ What did not work:
 Why this matters:
 
 - the current code is a strong draft but not yet a ship-ready repository
-- the next work should focus on finishing the engineering loop, not just adding more solver code
+- the next work should focus on broader fixture coverage and integration surface, not just more dense-kernel validation
 
 ## 11. Validation Strategy
 
@@ -659,7 +676,7 @@ Current configured state:
 
 Still needed:
 
-- broader fixture coverage beyond the current three dumped systems
+- broader fixture coverage beyond the current four dumped systems
 
 ## 13. Documentation Plan
 
@@ -722,27 +739,27 @@ The staged implementation plan is:
 
 Concrete near-term solver tasks:
 
-- add richer residual/conditioning diagnostics
 - add a higher-level public solve function for integration
 - add synthetic analytic test cases
 - add more multi-fixture parametrized tests as new SPEC dumps are added
+- consider how to expose diagnostics in a future SPECTRE-facing integration API without bloating the base solve path
 
 ## 15. Immediate Next Steps
 
 The next concrete tasks, in priority order, are:
 
-1. Add richer solver diagnostics and conditioning checks.
-2. Decide whether to package a docs-specific extra in `pyproject.toml` instead of relying on `docs/requirements.txt`.
-3. Enable and verify the hosted Read the Docs project.
-4. Add at least one more shaped 3D plasma fixture from SPEC, ideally one closer to the future SPECTRE target cases.
-5. Consider a lightweight benchmark path so fixture-regression confidence is paired with basic performance tracking.
+1. Enable the hosted Read the Docs project and verify that the public docs URL stops returning `404`.
+2. Add at least one more shaped 3D plasma fixture from SPEC, ideally one closer to the future SPECTRE target cases.
+3. Add a higher-level public solve function oriented toward downstream integration instead of only raw system objects.
+4. Broaden the benchmark set beyond the current dense fixture panels, especially if larger systems are added.
+5. Add synthetic analytic tests that do not rely on dumped SPEC data.
 6. Keep `plan.md` and the repository in sync as new work lands.
 
 ## 16. Open Gaps and Risks
 
 Open gaps:
 
-- hosted docs are not yet verified live
+- hosted docs are not yet live; `https://beltrami-jax.readthedocs.io/` returned `404` when checked on `2026-04-17`
 - fixture coverage is still narrow relative to the full SPEC branch space
 - no QA/QH or SPECTRE-like shaping cases are yet packaged
 
@@ -761,8 +778,8 @@ Project risk:
 
 Current honest status:
 
-- the linear solve kernel is implemented and regression-tested against multiple dumped SPEC systems, including a nonzero-`mu` plasma case and a vacuum case with nonzero `dMG`
-- the repository now includes docs sources, figures, and CI definitions, but it is not yet complete enough to call finished
+- the linear solve kernel, diagnostics helpers, benchmark helpers, and validation figures are implemented and regression-tested against multiple dumped SPEC systems
+- the repository now includes docs sources, figures, benchmark assets, and CI definitions, but it is not yet complete enough to call finished
 
 ## 17. Restart From Scratch Checklist
 
@@ -791,8 +808,9 @@ If all local context were lost, the restart procedure should be:
 12. Add `src/beltrami_jax/data/__init__.py` so packaged resources are importable.
 13. Run `pytest`.
 14. Run `sphinx -W`.
-15. Fill in README, docs, and CI.
-16. Commit and push.
+15. Regenerate committed validation assets with `tools/generate_validation_assets.py`.
+16. Fill in README, docs, and CI.
+17. Commit and push.
 
 ## 18. Chronological Log
 
@@ -1018,6 +1036,78 @@ Validation results:
   - `./.venv/bin/python -m pytest`
   - outcome:
     - `15 passed in 5.19s`
+    - `Total coverage: 100.00%`
+- docs build:
+  - `./.venv/bin/python -m sphinx -b html -W docs docs/_build/html`
+  - outcome:
+    - build succeeded
+
+### 2026-04-17: diagnostics, benchmarks, validation panels, and 3D fixture expansion
+
+Completed:
+
+- exported and packaged an additional fixed-boundary 3D plasma fixture from SPEC:
+  - input file: `/Users/rogerio/local/SPEC/InputFiles/TestCases/G3V02L1Fi.001.sp`
+  - dump-only copy: `/Users/rogerio/local/SPEC_runs/G3V02L1Fi.dump.sp`
+  - region: `lvol = 1`
+  - matrix size: `361`
+  - `mu = 1.8189908612531447e-04`
+  - `psi = (9.6560529129151959e-02, 0.0)`
+- added new public modules:
+  - `src/beltrami_jax/diagnostics.py`
+  - `src/beltrami_jax/benchmark.py`
+- expanded `src/beltrami_jax/types.py` with diagnostic and benchmark dataclasses
+- updated examples to print richer diagnostics and added:
+  - `examples/benchmark_fixtures.py`
+- added docs-only installation extra in `pyproject.toml`
+- switched `docs/requirements.txt` to install the package through `-e .[docs]`
+- generated and committed polished validation assets:
+  - `/Users/rogerio/local/beltrami_jax/docs/_static/validation_panel.png`
+  - `/Users/rogerio/local/beltrami_jax/docs/_static/benchmark_panel.png`
+- updated README and docs pages to include the new validation and benchmark evidence
+
+Important design decisions:
+
+- diagnostics are exposed through dedicated helper functions instead of being baked into the solve result, so the core solve path stays lightweight
+- expensive conditioning work is opt-in via `compute_solve_diagnostics(..., include_condition_number=True)`
+- benchmark panels report steady-state fixture timings directly, while one-time compile costs are summarized by unique matrix size because JAX compilation is cached by shape
+- the repository documentation URL in `pyproject.toml` was changed away from Read the Docs because the expected hosted URL was not live
+
+Important failures and blockers:
+
+- `https://beltrami-jax.readthedocs.io/` returned `404` when checked with:
+  - `curl -I -L --max-redirs 3 https://beltrami-jax.readthedocs.io/`
+- this means the repository-side Read the Docs configuration is present, but the hosted project still needs to be enabled externally
+
+Exact commands used:
+
+- dump 3D plasma fixture:
+  - `env SPEC_DUMP_LINEAR_SYSTEM=/Users/rogerio/local/SPEC_runs/G3V02L1Fi.dump.lvol1 SPEC_DUMP_LINEAR_SYSTEM_LVOL=1 OMP_NUM_THREADS=1 /Users/rogerio/local/SPEC/build/build/bin/xspec /Users/rogerio/local/SPEC_runs/G3V02L1Fi.dump.sp`
+- package 3D plasma fixture:
+  - `PYTHONPATH=src ./.venv/bin/python tools/build_spec_fixture.py /Users/rogerio/local/SPEC_runs/G3V02L1Fi.dump.lvol1 /Users/rogerio/local/beltrami_jax/src/beltrami_jax/data/g3v02l1fi_lvol1.npz`
+- generate validation assets:
+  - `PYTHONPATH=src ./.venv/bin/python tools/generate_validation_assets.py --repeats 2`
+- verify hosted docs URL:
+  - `curl -I -L --max-redirs 3 https://beltrami-jax.readthedocs.io/`
+
+Validation results:
+
+- tests:
+  - `./.venv/bin/python -m pytest`
+  - outcome:
+    - `21 passed in 8.97s`
+    - `Total coverage: 100.00%`
+- docs build:
+  - `./.venv/bin/python -m sphinx -b html -W docs docs/_build/html`
+  - outcome:
+    - build succeeded
+
+Final local release-gate rerun before push:
+
+- tests:
+  - `./.venv/bin/python -m pytest`
+  - outcome:
+    - `21 passed in 20.72s`
     - `Total coverage: 100.00%`
 - docs build:
   - `./.venv/bin/python -m sphinx -b html -W docs docs/_build/html`

@@ -5,13 +5,15 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from beltrami_jax.benchmark import benchmark_parameter_scan, benchmark_solve
+from beltrami_jax.diagnostics import compare_against_reference, compute_solve_diagnostics
 from beltrami_jax.operators import magnetic_energy, relative_residual_norm
 from beltrami_jax.reference import load_packaged_reference
 from beltrami_jax.solver import solve_from_components, solve_parameter_scan
 from beltrami_jax.types import BeltramiLinearSystem
 
 
-@pytest.mark.parametrize("name", ["g3v01l0fi_lvol1", "g1v03l0fi_lvol2", "g3v02l0fr_lu_lvol3"])
+@pytest.mark.parametrize("name", ["g3v01l0fi_lvol1", "g1v03l0fi_lvol2", "g3v02l0fr_lu_lvol3", "g3v02l1fi_lvol1"])
 def test_spec_fixture_solution_matches_dump(name: str) -> None:
     reference = load_packaged_reference(name)
     result = solve_from_components(reference.system)
@@ -77,6 +79,65 @@ def test_verbose_solve_reports_progress(capsys: pytest.CaptureFixture[str]) -> N
     result = solve_from_components(reference.system, verbose=True)
     captured = capsys.readouterr()
     assert "[beltrami_jax] solving" in captured.out
+    assert "operator_fro_norm=" in captured.out
+    assert "rhs_norm=" in captured.out
+    assert "solution_norm=" in captured.out
     assert "residual_norm=" in captured.out
     assert "relative_residual_norm=" in captured.out
     assert float(result.relative_residual_norm) < 1e-11
+
+
+def test_compute_solve_diagnostics_reports_finite_metrics() -> None:
+    reference = load_packaged_reference("g3v02l1fi_lvol1")
+    result = solve_from_components(reference.system)
+    diagnostics = compute_solve_diagnostics(result, include_condition_number=True)
+    assert diagnostics.label == reference.system.label
+    assert diagnostics.size == reference.system.size
+    assert diagnostics.operator_fro_norm > 0.0
+    assert diagnostics.rhs_l2_norm > 0.0
+    assert diagnostics.solution_l2_norm > 0.0
+    assert diagnostics.residual_l2_norm < 1e-8
+    assert diagnostics.relative_residual_norm < 1e-10
+    assert diagnostics.condition_number_2 is not None
+    assert np.isfinite(diagnostics.condition_number_2)
+
+
+def test_compare_against_reference_is_machine_precision() -> None:
+    reference = load_packaged_reference("g3v02l1fi_lvol1")
+    result = solve_from_components(reference.system)
+    comparison = compare_against_reference(reference, result)
+    assert comparison.size == reference.system.size
+    assert comparison.operator_relative_error < 1e-12
+    assert comparison.rhs_relative_error < 1e-12
+    assert comparison.solution_relative_error < 1e-10
+    assert comparison.max_abs_solution_error < 1e-10
+
+
+def test_benchmark_helpers_return_positive_timings() -> None:
+    reference = load_packaged_reference("g1v03l0fi_lvol2")
+    solve_benchmark = benchmark_solve(reference, repeats=1)
+    assert solve_benchmark.size == reference.system.size
+    assert solve_benchmark.compile_and_solve_seconds > 0.0
+    assert solve_benchmark.steady_state_seconds > 0.0
+
+    scan_benchmarks = benchmark_parameter_scan(reference, batch_sizes=(1, 2), repeats=1, relative_span=0.01)
+    assert [item.batch_size for item in scan_benchmarks] == [1, 2]
+    for item in scan_benchmarks:
+        assert item.size == reference.system.size
+        assert item.compile_and_solve_seconds > 0.0
+        assert item.steady_state_seconds > 0.0
+        assert item.per_system_seconds > 0.0
+
+
+def test_benchmark_helpers_reject_invalid_inputs() -> None:
+    reference = load_packaged_reference("g1v03l0fi_lvol2")
+    vacuum_reference = load_packaged_reference("g3v02l0fr_lu_lvol3")
+
+    with pytest.raises(ValueError, match="repeats"):
+        benchmark_solve(reference, repeats=0)
+
+    with pytest.raises(ValueError, match="plasma-region"):
+        benchmark_parameter_scan(vacuum_reference, repeats=1)
+
+    with pytest.raises(ValueError, match="repeats"):
+        benchmark_parameter_scan(reference, repeats=0)

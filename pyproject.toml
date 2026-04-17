@@ -28,20 +28,25 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+docs = [
+  "furo>=2025.12.19",
+  "myst-parser>=5",
+  "sphinx>=9",
+]
 dev = [
   "build>=1.4",
-  "furo>=2025.12.19",
   "matplotlib>=3.10",
-  "myst-parser>=5",
   "numpy>=2.4",
   "pytest>=9",
   "pytest-cov>=7",
+  "furo>=2025.12.19",
+  "myst-parser>=5",
   "sphinx>=9",
 ]
 
 [project.urls]
 Homepage = "https://github.com/rogeriojorge/beltrami_jax"
-Documentation = "https://beltrami-jax.readthedocs.io/"
+Documentation = "https://github.com/rogeriojorge/beltrami_jax/tree/main/docs"
 Repository = "https://github.com/rogeriojorge/beltrami_jax"
 Issues = "https://github.com/rogeriojorge/beltrami_jax/issues"
 

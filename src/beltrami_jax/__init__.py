@@ -1,3 +1,5 @@
+from .benchmark import benchmark_parameter_scan, benchmark_solve
+from .diagnostics import compare_against_reference, compute_solve_diagnostics
 from .operators import (
     assemble_operator,
     assemble_rhs,
@@ -7,16 +9,33 @@ from .operators import (
     residual,
     residual_norm,
 )
-from .reference import load_packaged_reference, load_spec_text_dump
+from .reference import list_packaged_references, load_packaged_reference, load_spec_text_dump
 from .solver import solve_from_components, solve_operator, solve_parameter_scan
-from .types import BeltramiLinearSystem, SolveResult, SpecLinearSystemReference
+from .types import (
+    BeltramiLinearSystem,
+    ParameterScanBenchmark,
+    ReferenceComparison,
+    SolveBenchmark,
+    SolveDiagnostics,
+    SolveResult,
+    SpecLinearSystemReference,
+)
 
 __all__ = [
     "BeltramiLinearSystem",
+    "ParameterScanBenchmark",
+    "ReferenceComparison",
+    "SolveBenchmark",
+    "SolveDiagnostics",
     "SolveResult",
     "SpecLinearSystemReference",
     "assemble_operator",
     "assemble_rhs",
+    "benchmark_parameter_scan",
+    "benchmark_solve",
+    "compare_against_reference",
+    "compute_solve_diagnostics",
+    "list_packaged_references",
     "load_packaged_reference",
     "load_spec_text_dump",
     "magnetic_energy",

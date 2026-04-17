@@ -1114,6 +1114,19 @@ Final local release-gate rerun before push:
   - outcome:
     - build succeeded
 
+Publication status:
+
+- committed to `main` as:
+  - `7d4f84e` (`Add diagnostics, benchmarks, and validation panels`)
+- pushed successfully to:
+  - `https://github.com/rogeriojorge/beltrami_jax.git`
+- GitHub Actions verification:
+  - run id: `24571939916`
+  - outcome:
+    - `docs` passed
+    - `test (3.11)` passed
+    - `test (3.13)` passed
+
 ## 19. Notes For Future Updates
 
 When future work is done, update the following sections:

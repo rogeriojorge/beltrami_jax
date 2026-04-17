@@ -220,8 +220,10 @@ Completed:
 
 Important current repo state:
 
-- The repository currently has no commits yet on `main`
-- All current files are untracked local work
+- Initial commit created on `main`
+- Current published commit when last updated:
+  - `062bda41b97129872ddb9d9524aa17e6edda6449`
+- Branch `main` is pushed to `origin/main`
 
 ### 7.2 SPEC Clone, Build, and Run
 
@@ -410,8 +412,6 @@ What does not exist yet:
 - `.readthedocs.yaml`
 - GitHub Actions CI workflow
 - local docs build configuration
-- committed git history
-- pushed code to GitHub remote
 
 Known resolved inconsistency:
 
@@ -662,7 +662,6 @@ Open gaps:
 
 - no docs
 - no CI
-- no committed history
 - no published validation summary in the repository
 - only one dumped reference system is currently packaged
 
@@ -748,7 +747,6 @@ Did not finish:
 Completed:
 
 - audited current repository state
-- verified that the repository still has no commits
 - wrote this `plan.md` restart document and project log
 
 Decision:
@@ -780,6 +778,22 @@ Validation result:
 - outcome:
   - `10 passed in 13.05s`
   - `Total coverage: 100.00%`
+
+### 2026-04-16: initial publish
+
+Completed:
+
+- staged the full repository
+- created the initial commit on `main`
+- commit:
+  - `062bda41b97129872ddb9d9524aa17e6edda6449`
+- pushed `main` to:
+  - `https://github.com/rogeriojorge/beltrami_jax.git`
+
+State after publish:
+
+- repository is now present on GitHub with the initial working scaffold
+- remaining work is primarily docs, CI, and broader SPEC validation coverage
 
 ## 19. Notes For Future Updates
 

@@ -401,17 +401,21 @@ What exists:
 - SPEC text-dump loader
 - packaged SPEC regression fixture under `src/beltrami_jax/data/`
 - package data module `src/beltrami_jax/data/__init__.py`
-- minimal `README.md`
+- expanded `README.md` with installation, validation workflow, and figures
 - examples
 - tests passing locally against the packaged SPEC fixture
 - editable install validated locally
+- documentation tree under `docs/`
+- `.readthedocs.yaml`
+- local docs build configuration
+- GitHub Actions CI workflow source under `.github/workflows/`
+- generated figure assets under `docs/_static/`
+- local Sphinx build validated with warnings treated as errors
 
 What does not exist yet:
 
-- documentation tree under `docs/`
-- `.readthedocs.yaml`
-- GitHub Actions CI workflow
-- local docs build configuration
+- hosted Read the Docs project configuration outside the repository
+- confirmation of the first GitHub Actions run after the workflow is pushed
 
 Known resolved inconsistency:
 
@@ -436,10 +440,16 @@ Repository root:
   - local env, caches, build products
 - `LICENSE`
   - MIT license
+- `README.md`
+  - user-facing project overview, install instructions, examples, and figures
 - `pyproject.toml`
   - package metadata, dependencies, pytest and coverage settings
 - `plan.md`
   - this restartable project log and plan
+- `.readthedocs.yaml`
+  - Read the Docs build definition
+- `.github/workflows/ci.yml`
+  - GitHub Actions workflow for tests and docs builds
 
 Source package:
 
@@ -479,6 +489,31 @@ Tools:
 - `tools/build_spec_fixture.py`
   - convert dumped SPEC text files into packaged compressed fixture data
 
+Documentation:
+
+- `docs/conf.py`
+  - Sphinx configuration
+- `docs/index.md`
+  - landing page and table of contents
+- `docs/overview.md`
+  - package scope and design choices
+- `docs/theory.md`
+  - equations, physical interpretation, and numerical model
+- `docs/validation.md`
+  - SPEC fixture workflow and test strategy
+- `docs/examples.md`
+  - example scripts and generated figures
+- `docs/api.md`
+  - public API reference
+- `docs/limitations.md`
+  - current limitations and future work
+- `docs/references.md`
+  - literature and documentation references
+- `docs/requirements.txt`
+  - documentation build dependencies
+- `docs/_static/`
+  - committed figure assets used by the docs and README
+
 ## 10. What Worked, What Did Not, and Why
 
 What worked:
@@ -494,13 +529,17 @@ What worked:
 - packaging the dumped SPEC system into a repository fixture
 - editable install with `pip install -e '.[dev]'`
 - local test execution at 100 percent coverage
+- Sphinx documentation tree and Read the Docs configuration
+- generated figures from the packaged-fixture examples
+- local docs build with `sphinx -W`
+- GitHub Actions workflow definition for tests and docs builds
 
 What did not work:
 
 - plain initial SPEC clone path failed with packfile/index-pack problems
 - initial SPEC runtime without legacy Fortran mode hit format-related issues
 - first fixture-generation attempt failed because `reference.py` used `Path.with_suffix`, which stripped the `.lvol1` portion from dump prefixes
-- repository metadata is still incomplete because docs/CI do not exist yet
+- first strict docs build failed because autodoc tried to render imported JAX aliases such as `Array`; fixed by excluding those imported symbols from the API page
 
 Why this matters:
 
@@ -576,8 +615,8 @@ Current configured state:
 
 Still needed:
 
-- real CI workflow
 - broader fixture coverage beyond the first dumped system
+- verification of the workflow on GitHub after push
 
 ## 13. Documentation Plan
 
@@ -599,6 +638,10 @@ Must include:
 - references and citations
 
 Files to add:
+
+- none for the initial docs scaffold
+
+Files now present:
 
 - `.readthedocs.yaml`
 - `docs/conf.py`
@@ -626,8 +669,8 @@ Documentation quality bar:
 The staged implementation plan is:
 
 1. Finish the current linear regression workflow.
-2. Add README, docs, and Read the Docs configuration.
-3. Add CI workflow with coverage reporting.
+2. Add README, docs, and Read the Docs configuration. (done)
+3. Add CI workflow with coverage reporting. (done)
 4. Add more SPEC fixtures and broader validations.
 5. Expand the solver API for integration use.
 6. Add richer solver diagnostics and conditioning tools.
@@ -645,25 +688,23 @@ Concrete near-term solver tasks:
 
 The next concrete tasks, in priority order, are:
 
-1. Create docs and `.readthedocs.yaml`.
-2. Create `.github/workflows/ci.yml`.
-3. Generate example figures into `docs/_static/`.
-4. Build docs locally with Sphinx.
-5. Export at least one additional SPEC fixture:
+1. Push the new docs and CI configuration, then confirm the first GitHub Actions run.
+2. Export at least one additional SPEC fixture:
    - different `mu`
    - preferably one vacuum case
-6. Add parametrized multi-fixture tests.
-7. Add richer solver diagnostics and conditioning checks.
-8. Keep `plan.md` and the repository in sync as new work lands.
+3. Add parametrized multi-fixture tests.
+4. Add richer solver diagnostics and conditioning checks.
+5. Decide whether to package a docs-specific extra in `pyproject.toml` instead of relying on `docs/requirements.txt`.
+6. Enable and verify the hosted Read the Docs project.
+7. Keep `plan.md` and the repository in sync as new work lands.
 
 ## 16. Open Gaps and Risks
 
 Open gaps:
 
-- no docs
-- no CI
-- no published validation summary in the repository
 - only one dumped reference system is currently packaged
+- hosted docs are not yet verified live
+- CI has not yet been observed running from the pushed workflow in this round
 
 Technical risks:
 
@@ -681,7 +722,7 @@ Project risk:
 Current honest status:
 
 - the linear solve kernel is implemented and regression-tested against one dumped SPEC system
-- the repository is not yet complete enough to call finished
+- the repository now includes docs sources, figures, and CI definitions, but it is not yet complete enough to call finished
 
 ## 17. Restart From Scratch Checklist
 
@@ -806,6 +847,38 @@ Note:
 
 - do not record a fixed "current HEAD" hash inside this file unless it is part of a dated log entry
 - otherwise the file becomes stale immediately after the next commit
+
+### 2026-04-17: docs, figures, and CI scaffold
+
+Completed:
+
+- expanded `README.md` from a minimal placeholder into a fuller project overview
+- added a Sphinx documentation tree under `docs/`
+- added `.readthedocs.yaml`
+- added a GitHub Actions workflow under `.github/workflows/ci.yml`
+- generated committed figures:
+  - `docs/_static/spec_fixture_spectrum.png`
+  - `docs/_static/parameter_scan.png`
+- built the docs locally with strict warnings enabled
+- reran the full test suite locally
+
+Bug found and fixed:
+
+- the first strict docs build failed because the API page let autodoc inspect imported JAX aliases such as `Array`
+- fix:
+  - exclude those imported symbols from the API reference page
+
+Validation results:
+
+- docs build:
+  - `./.venv/bin/python -m sphinx -W -b html docs docs/_build/html`
+  - outcome:
+    - build succeeded
+- tests:
+  - `./.venv/bin/python -m pytest`
+  - outcome:
+    - `10 passed in 3.93s`
+    - `Total coverage: 100.00%`
 
 ## 19. Notes For Future Updates
 

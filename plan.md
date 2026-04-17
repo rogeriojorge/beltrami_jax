@@ -222,7 +222,7 @@ Important current repo state:
 
 - Initial commit created on `main`
 - Current published commit when last updated:
-  - `062bda41b97129872ddb9d9524aa17e6edda6449`
+  - `2700f2de8e343a0450ca5300995856cf264e4618`
 - Branch `main` is pushed to `origin/main`
 
 ### 7.2 SPEC Clone, Build, and Run
@@ -654,7 +654,7 @@ The next concrete tasks, in priority order, are:
    - preferably one vacuum case
 6. Add parametrized multi-fixture tests.
 7. Add richer solver diagnostics and conditioning checks.
-8. Commit and push the repository.
+8. Keep `plan.md` and the repository in sync as new work lands.
 
 ## 16. Open Gaps and Risks
 
@@ -794,6 +794,17 @@ State after publish:
 
 - repository is now present on GitHub with the initial working scaffold
 - remaining work is primarily docs, CI, and broader SPEC validation coverage
+
+### 2026-04-16: plan synchronization publish
+
+Completed:
+
+- updated `plan.md` after the initial publish so repository status no longer claimed the repo was uncommitted or unpushed
+- pushed the synchronized plan update
+
+Current head after synchronization:
+
+- `2700f2de8e343a0450ca5300995856cf264e4618`
 
 ## 19. Notes For Future Updates
 

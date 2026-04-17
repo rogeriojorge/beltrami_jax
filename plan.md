@@ -616,7 +616,7 @@ Current configured state:
 Still needed:
 
 - broader fixture coverage beyond the first dumped system
-- verification of the workflow on GitHub after push
+- verification of the workflow on GitHub after the example-test portability fix
 
 ## 13. Documentation Plan
 
@@ -688,7 +688,7 @@ Concrete near-term solver tasks:
 
 The next concrete tasks, in priority order, are:
 
-1. Push the new docs and CI configuration, then confirm the first GitHub Actions run.
+1. Push the example-test portability fix, then confirm the GitHub Actions run is green.
 2. Export at least one additional SPEC fixture:
    - different `mu`
    - preferably one vacuum case
@@ -704,7 +704,7 @@ Open gaps:
 
 - only one dumped reference system is currently packaged
 - hosted docs are not yet verified live
-- CI has not yet been observed running from the pushed workflow in this round
+- CI has not yet been observed green after the example-test portability fix
 
 Technical risks:
 
@@ -878,6 +878,35 @@ Validation results:
   - `./.venv/bin/python -m pytest`
   - outcome:
     - `10 passed in 3.93s`
+    - `Total coverage: 100.00%`
+
+### 2026-04-17: first CI run and portability fix
+
+Completed:
+
+- pushed the first docs and CI scaffold
+- observed the first GitHub Actions run start on GitHub
+- inspected the failing test-job logs
+- fixed the example smoke test to use `sys.executable` instead of a hardcoded local `.venv/bin/python`
+- reran local tests and strict docs build after the fix
+
+Bug found and fixed:
+
+- the first GitHub Actions test jobs failed because `tests/test_examples.py` assumed the interpreter lived at `.venv/bin/python`
+- that assumption is true locally but false on GitHub-hosted runners
+- fix:
+  - use the interpreter running pytest via `sys.executable`
+
+Validation results after the fix:
+
+- docs build:
+  - `./.venv/bin/python -m sphinx -W -b html docs docs/_build/html`
+  - outcome:
+    - build succeeded
+- tests:
+  - `./.venv/bin/python -m pytest`
+  - outcome:
+    - `10 passed in 4.44s`
     - `Total coverage: 100.00%`
 
 ## 19. Notes For Future Updates

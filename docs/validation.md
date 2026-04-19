@@ -54,6 +54,16 @@ These figures summarize:
 - steady-state dense solve timings
 - batched parameter-scan throughput
 
+Release-gate example outputs generated from the current source tree:
+
+![SPEC workflow panel](_static/spec_fixture_spectrum.png)
+
+![Geometry workflow panel](_static/parameter_scan.png)
+
+![Autodiff panel](_static/autodiff_gradient_check.png)
+
+![Vacuum GMRES panel](_static/vacuum_gmres_panel.png)
+
 ## How the fixture was generated
 
 The local SPEC checkout was instrumented with a temporary dump hook controlled by the environment variable:
@@ -123,17 +133,17 @@ The test suite verifies:
 The repository enforces a coverage threshold in `pyproject.toml`:
 
 - required line coverage: at least 90%
-
-At the current stage of the scaffold, the local test suite reaches 100% line coverage on the implemented package code.
+- current release-gate result: `28 passed` with `96.10%` line coverage
 
 ## Known validation gaps
 
-The current validation is strong for the implemented dense linear stage, but still incomplete in project terms.
+The current validation is strong for the implemented regression and internal-workflow stages, but still incomplete in project terms.
 
 Remaining validation work includes:
 
 - comparisons against later SPECTRE integration points
 - broader 3D fixture coverage closer to anticipated SPECTRE use cases
+- branch-specific parity checks once public SPECTRE source can be compared directly
 
 ## Why exact dense regression matters
 

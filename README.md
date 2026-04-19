@@ -1,5 +1,10 @@
 # beltrami_jax
 
+[![CI](https://github.com/rogeriojorge/beltrami_jax/actions/workflows/ci.yml/badge.svg)](https://github.com/rogeriojorge/beltrami_jax/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/rogeriojorge/beltrami_jax/blob/main/LICENSE)
+[![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen.svg)](https://github.com/rogeriojorge/beltrami_jax/actions/workflows/ci.yml)
+
 `beltrami_jax` is a differentiable JAX implementation of the SPEC/SPECTRE-style Beltrami workflow used inside multi-region relaxed MHD calculations.
 
 The repository now covers the full supported Beltrami path inside `beltrami_jax` itself:
@@ -12,6 +17,8 @@ The repository now covers the full supported Beltrami path inside `beltrami_jax`
 - vectorization, autodiff, diagnostics, benchmarks, and standalone example workflows
 
 This is still not a full port of all of SPEC or SPECTRE, but the package is no longer limited to pre-dumped linear systems.
+
+The repository ships under the MIT License; see [LICENSE](/Users/rogerio/local/beltrami_jax/LICENSE).
 
 ## Motivation
 
@@ -41,6 +48,14 @@ which, after geometry-dependent assembly, becomes a linear system
 
 - direct regression against dumped SPEC linear systems
 - internally assembled geometry-driven Beltrami solves that go from input geometry to nonlinear `mu` update, output files, and postprocessing
+
+In terms of magnetic-field physics, the code works with a discretized vector potential whose curl reconstructs the magnetic field. In Taylor-relaxed plasma regions the force-free relation
+
+```math
+\nabla \times \mathbf{B} = \mu \mathbf{B}
+```
+
+is the Euler-Lagrange condition that arises when magnetic energy is minimized at fixed helicity and fixed fluxes. That is why this solver matters for stellarators, tokamaks, and MRxMHD workflows: it is the kernel that turns geometry and constraints into a relaxed magnetic state.
 
 ## Implemented scope
 
@@ -115,6 +130,23 @@ Run the vacuum/GMRES benchmark and export example:
 
 The example scripts are intentionally standalone. Each script keeps its input parameters at the top, writes files under `examples/_generated/`, prints progress to the terminal, and generates at least one figure or exported data product.
 
+## Latest Release Checks
+
+Latest local release gate:
+
+- `28 passed in 39.99s`
+- `96.10%` total line coverage
+- strict Sphinx build passed with `-W`
+- runtime code does not depend on `tomllib`, so Python `3.10+` support is not blocked by stdlib TOML parsing differences
+
+Latest remote CI verification:
+
+- Python `3.10`, `3.11`, `3.12`, and `3.13` test jobs pass
+- docs build passes
+- source and wheel builds pass
+
+The current CI workflow is defined in [.github/workflows/ci.yml](/Users/rogerio/local/beltrami_jax/.github/workflows/ci.yml).
+
 ## Validation figures
 
 Reviewer-facing validation summary generated from the committed SPEC fixtures:
@@ -124,6 +156,24 @@ Reviewer-facing validation summary generated from the committed SPEC fixtures:
 Benchmark summary generated from the same packaged fixture set:
 
 ![Benchmark panel](docs/_static/benchmark_panel.png)
+
+Standalone workflow outputs generated from the current example scripts:
+
+![SPEC fixture workflow](docs/_static/spec_fixture_spectrum.png)
+
+![Geometry parameter scan](docs/_static/parameter_scan.png)
+
+![Autodiff gradient check](docs/_static/autodiff_gradient_check.png)
+
+![Vacuum GMRES workflow](docs/_static/vacuum_gmres_panel.png)
+
+Current quantitative highlights from the committed validation and benchmark runs:
+
+- SPEC regression error stays at or below roughly `1e-15` across the packaged fixtures
+- packaged fixture condition numbers span roughly `2.6e4` to `5.4e7`
+- the compact SPEC GMRES example converges in `13` iterations with solution-relative error around `3.5e-16`
+- the internal vacuum GMRES example converges with relative residual around `4.6e-11`
+- the current validation asset generator measures per-system batched scan costs down to about `5.9e-4` seconds on the local release machine for the compact fixture set
 
 ## Repository layout
 
@@ -139,6 +189,10 @@ Benchmark summary generated from the same packaged fixture set:
   - developer tools such as SPEC dump packaging
 - `docs/`
   - Sphinx documentation for Read the Docs
+- `.github/workflows/ci.yml`
+  - CI/CD workflow for tests, docs, and package builds
+- `LICENSE`
+  - MIT license text
 - `plan.md`
   - full project context, setup, restart log, and running implementation plan
 
@@ -178,6 +232,58 @@ In addition to SPEC-regression fixtures, the package now exposes an internal geo
 - postprocess with diagnostics, parameter scans, autodiff, and custom figures
 
 That is the path used by the new standalone examples and it is the package’s current answer to the Beltrami functionality that future SPECTRE integration will need.
+
+## Using `beltrami_jax` From Other Codes
+
+The package is designed so different upstream codes can meet it at different levels.
+
+### From SPEC dumps
+
+If an upstream code can export SPEC-style matrices, load and solve them directly:
+
+```python
+from beltrami_jax import load_spec_text_dump, solve_from_components
+
+reference = load_spec_text_dump("/path/to/run.dump.lvol1")
+result = solve_from_components(reference.system, method="dense", verbose=True)
+```
+
+### From a Python, C++, or Fortran code that already knows the geometry
+
+If the upstream code can pass geometry parameters and fluxes instead of a dumped matrix, use the internal assembly path:
+
+```python
+from beltrami_jax import (
+    BeltramiProblem,
+    FourierBeltramiGeometry,
+    build_fourier_mode_basis,
+    solve_helicity_constrained_equilibrium,
+)
+
+geometry = FourierBeltramiGeometry(major_radius=3.0, minor_radius=1.0, elongation=1.2)
+basis = build_fourier_mode_basis(max_radial_order=1, max_poloidal_mode=2, max_toroidal_mode=1)
+problem = BeltramiProblem.from_arraylike(
+    geometry=geometry,
+    basis=basis,
+    psi=(0.1, 0.0),
+    target_helicity=0.05,
+    initial_mu=0.02,
+    solver="gmres",
+)
+result = solve_helicity_constrained_equilibrium(problem)
+```
+
+### From SPECTRE or another nonlinear equilibrium code
+
+The intended integration contract is:
+
+1. provide geometry, basis, fluxes, and target constraints
+2. call `assemble_fourier_beltrami_system` or `BeltramiProblem`
+3. solve with `solve_from_components` or `solve_helicity_constrained_equilibrium`
+4. consume the returned coefficients, energies, helicities, residuals, and histories
+5. save or exchange data using `save_problem_json` and `save_nonlinear_solution`
+
+See the full integration notes in [docs/integration.md](/Users/rogerio/local/beltrami_jax/docs/integration.md).
 
 ## Generating new fixtures from SPEC
 
@@ -232,6 +338,7 @@ Planned documentation coverage includes:
 
 - theory and equations
 - mapping from SPEC matrices to the JAX API
+- integration with external codes
 - validation workflow
 - examples
 - API reference

@@ -22,6 +22,10 @@ This example:
 - demonstrates matrix-free GMRES on the same operator
 - writes a JSON summary and a validation panel under `examples/_generated/solve_spec_fixture/`
 
+Committed figure:
+
+![SPEC fixture workflow](_static/spec_fixture_spectrum.png)
+
 ## Geometry-driven parameter scan and nonlinear solve
 
 Run:
@@ -39,6 +43,10 @@ This example:
 - performs a vectorized `mu` scan with `solve_parameter_scan`
 - writes scan data and a postprocessed figure under `examples/_generated/parameter_scan/`
 
+Committed figure:
+
+![Geometry parameter scan](_static/parameter_scan.png)
+
 ## Differentiate magnetic energy with respect to `mu`
 
 Run:
@@ -55,6 +63,10 @@ This example:
 - applies `jax.grad` to a solved-energy objective
 - writes a gradient report and a verification figure under `examples/_generated/autodiff_mu/`
 
+Committed figure:
+
+![Autodiff gradient check](_static/autodiff_gradient_check.png)
+
 ## Vacuum/GMRES export and benchmark workflow
 
 Run:
@@ -70,6 +82,10 @@ This example:
 - exports the solution bundle with `save_nonlinear_solution`
 - benchmarks a dense solve and a batched parameter scan
 - writes a compact performance figure under `examples/_generated/benchmark_fixtures/`
+
+Committed figure:
+
+![Vacuum GMRES benchmark](_static/vacuum_gmres_panel.png)
 
 ## Regenerate the committed validation panels
 

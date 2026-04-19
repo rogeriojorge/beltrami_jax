@@ -19,6 +19,23 @@ This page documents the currently exported public API.
    :exclude-members: Array, ArrayLike
 ```
 
+## Source-code map
+
+The main implementation files are:
+
+- `src/beltrami_jax/types.py`
+- `src/beltrami_jax/geometry.py`
+- `src/beltrami_jax/operators.py`
+- `src/beltrami_jax/iterative.py`
+- `src/beltrami_jax/solver.py`
+- `src/beltrami_jax/nonlinear.py`
+- `src/beltrami_jax/io.py`
+- `src/beltrami_jax/reference.py`
+- `src/beltrami_jax/diagnostics.py`
+- `src/beltrami_jax/benchmark.py`
+
+These are the files to read if you want to understand how the package maps geometry, constraints, and diagnostics onto the Beltrami solve.
+
 ## Operator helpers
 
 ```{eval-rst}

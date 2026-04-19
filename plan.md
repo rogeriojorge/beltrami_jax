@@ -1181,6 +1181,47 @@ Validation results:
   - outcome:
     - all completed and wrote outputs under `examples/_generated/`
 
+### 2026-04-19: release hardening for shipping
+
+Completed:
+
+- relaxed build-system requirements in `pyproject.toml` to unpinned `setuptools` and `wheel`
+- lowered `requires-python` to `>=3.10`
+- added Python `3.10` classifier
+- expanded CI to test Python `3.10`, `3.11`, `3.12`, and `3.13`
+- added a distribution build job to CI with `python -m build`
+- added README badges for CI, Python support, MIT license, and coverage
+- added and linked a full integration guide at `docs/integration.md`
+- expanded README and docs with:
+  - magnetic-field and fusion context
+  - more equations
+  - explicit integration patterns for dumped SPEC systems, direct components, internal geometry assembly, and future SPECTRE use
+  - refreshed validation and example figures
+  - release-gate test, coverage, and benchmark summaries
+- refreshed committed documentation figures from the current standalone examples:
+  - `docs/_static/spec_fixture_spectrum.png`
+  - `docs/_static/parameter_scan.png`
+  - `docs/_static/autodiff_gradient_check.png`
+  - `docs/_static/vacuum_gmres_panel.png`
+
+Important design decisions:
+
+- kept runtime compatibility simple by avoiding any `tomllib` dependency in package code
+- used README badges that do not require an external hosted docs service, since Read the Docs is still not live
+- added a package-build job to CI so shipping quality is validated at the source/wheel level, not only through editable installs
+
+Validation results:
+
+- tests:
+  - `./.venv/bin/python -m pytest`
+  - outcome:
+    - `28 passed in 37.15s`
+    - `Total coverage: 96.10%`
+- docs build:
+  - `./.venv/bin/python -m sphinx -b html -W docs docs/_build/html`
+  - outcome:
+    - build succeeded
+
 ## 19. Notes For Future Updates
 
 When future work is done, update the following sections:

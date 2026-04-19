@@ -20,6 +20,7 @@ overview
 theory
 validation
 examples
+integration
 api
 limitations
 references

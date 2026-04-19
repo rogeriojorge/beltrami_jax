@@ -1,79 +1,75 @@
 # Examples
 
-The repository includes small executable examples under `examples/`. They are designed to be:
+The repository includes executable examples under `examples/`. They are designed to be:
 
-- simple to run
+- standalone scripts with parameters at the top
 - verbose in the terminal
-- directly tied to the packaged SPEC fixture
+- capable of writing inputs, outputs, and figures under `examples/_generated/`
+- representative of both dumped-SPEC and internal-assembly workflows
 
 ## Solve the packaged SPEC fixture
 
 Run:
 
 ```bash
-./.venv/bin/python examples/solve_spec_fixture.py --name g3v02l1fi_lvol1
+./.venv/bin/python examples/solve_spec_fixture.py
 ```
 
 This example:
 
 - loads the packaged SPEC regression fixture
-- assembles and solves the dense JAX system
-- prints residual metrics, conditioning diagnostics, magnetic energy, and helicity
-- optionally writes a coefficient-spectrum figure with `--plot`
+- runs both dense and GMRES solves
+- demonstrates matrix-free GMRES on the same operator
+- writes a JSON summary and a validation panel under `examples/_generated/solve_spec_fixture/`
 
-Generated figure:
-
-![Coefficient spectrum](_static/spec_fixture_spectrum.png)
-
-## Parameter scan in `mu`
+## Geometry-driven parameter scan and nonlinear solve
 
 Run:
 
 ```bash
-./.venv/bin/python examples/parameter_scan.py --name g3v02l1fi_lvol1
+./.venv/bin/python examples/parameter_scan.py
 ```
 
 This example:
 
-- builds a small range of `mu` values around the reference case
-- uses `solve_parameter_scan`
-- prints the corresponding energy for each batched solve
-- optionally writes a line plot with `--plot`
-
-Generated figure:
-
-![Parameter scan](_static/parameter_scan.png)
+- defines a shaped geometry with `FourierBeltramiGeometry`
+- builds a packed basis with `build_fourier_mode_basis`
+- saves a JSON input file with `save_problem_json`
+- runs the outer helicity-constrained nonlinear solve
+- performs a vectorized `mu` scan with `solve_parameter_scan`
+- writes scan data and a postprocessed figure under `examples/_generated/parameter_scan/`
 
 ## Differentiate magnetic energy with respect to `mu`
 
 Run:
 
 ```bash
-./.venv/bin/python examples/autodiff_mu.py --name g3v02l1fi_lvol1
+./.venv/bin/python examples/autodiff_mu.py
 ```
 
 This example:
 
-- reconstructs a `BeltramiLinearSystem` for varying `mu`
-- solves the dense linear system in JAX
-- evaluates magnetic energy
-- applies `jax.grad` to obtain `dE/dmu`
-- prints a centered finite-difference check alongside the autodiff derivative
+- defines a geometry-driven problem
+- solves for a target helicity
+- rebuilds the linear system for varying `mu`
+- applies `jax.grad` to a solved-energy objective
+- writes a gradient report and a verification figure under `examples/_generated/autodiff_mu/`
 
-## Benchmark a packaged fixture
+## Vacuum/GMRES export and benchmark workflow
 
 Run:
 
 ```bash
-./.venv/bin/python examples/benchmark_fixtures.py --name g1v03l0fi_lvol2
+./.venv/bin/python examples/benchmark_fixtures.py
 ```
 
 This example:
 
-- measures one first-call timing for `solve_from_components`
-- measures steady-state repeated solve timing
-- benchmarks `solve_parameter_scan` for batch sizes `1`, `4`, and `8`
-- prints all timings in a compact, script-friendly format
+- builds a vacuum problem with internal geometry assembly
+- runs the outer loop with the GMRES solve path
+- exports the solution bundle with `save_nonlinear_solution`
+- benchmarks a dense solve and a batched parameter scan
+- writes a compact performance figure under `examples/_generated/benchmark_fixtures/`
 
 ## Regenerate the committed validation panels
 
@@ -83,24 +79,30 @@ The repository-level validation and benchmark figures are built from the package
 PYTHONPATH=src ./.venv/bin/python tools/generate_validation_assets.py --repeats 2
 ```
 
-## Regenerate the figures
-
-The committed figures in this documentation can be rebuilt with:
-
-```bash
-./.venv/bin/python examples/solve_spec_fixture.py --plot docs/_static/spec_fixture_spectrum.png
-./.venv/bin/python examples/parameter_scan.py --plot docs/_static/parameter_scan.png
-PYTHONPATH=src ./.venv/bin/python tools/generate_validation_assets.py --repeats 2
-```
-
 ## Example usage from Python
 
 ```python
-from beltrami_jax import load_packaged_reference, solve_from_components
+from beltrami_jax import (
+    BeltramiProblem,
+    FourierBeltramiGeometry,
+    assemble_fourier_beltrami_system,
+    build_fourier_mode_basis,
+    solve_helicity_constrained_equilibrium,
+)
 
-reference = load_packaged_reference()
-result = solve_from_components(reference.system, verbose=True)
+geometry = FourierBeltramiGeometry(major_radius=3.0, minor_radius=1.0, elongation=1.2)
+basis = build_fourier_mode_basis(max_radial_order=1, max_poloidal_mode=2, max_toroidal_mode=1)
+assembly = assemble_fourier_beltrami_system(geometry, basis, mu=0.05, psi=(0.1, 0.0))
 
-print(result.relative_residual_norm)
-print(result.magnetic_energy)
+problem = BeltramiProblem.from_arraylike(
+    geometry=geometry,
+    basis=basis,
+    psi=(0.1, 0.0),
+    target_helicity=0.05,
+    initial_mu=0.05,
+)
+result = solve_helicity_constrained_equilibrium(problem)
+
+print(result.solve.relative_residual_norm)
+print(result.solve.magnetic_energy)
 ```

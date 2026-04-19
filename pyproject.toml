@@ -24,24 +24,24 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-  "jax>=0.10.0",
+  "jax",
 ]
 
 [project.optional-dependencies]
 docs = [
-  "furo>=2025.12.19",
-  "myst-parser>=5",
-  "sphinx>=9",
+  "furo",
+  "myst-parser",
+  "sphinx",
 ]
 dev = [
-  "build>=1.4",
-  "matplotlib>=3.10",
-  "numpy>=2.4",
-  "pytest>=9",
-  "pytest-cov>=7",
-  "furo>=2025.12.19",
-  "myst-parser>=5",
-  "sphinx>=9",
+  "build",
+  "matplotlib",
+  "numpy",
+  "pytest",
+  "pytest-cov",
+  "furo",
+  "myst-parser",
+  "sphinx",
 ]
 
 [project.urls]

@@ -35,6 +35,36 @@ This page documents the currently exported public API.
    :exclude-members: Array, ArrayLike
 ```
 
+## Geometry assembly
+
+```{eval-rst}
+.. automodule:: beltrami_jax.geometry
+   :members:
+   :exclude-members: Array
+```
+
+## Krylov solve
+
+```{eval-rst}
+.. automodule:: beltrami_jax.iterative
+   :members:
+   :exclude-members: Array
+```
+
+## Nonlinear workflow
+
+```{eval-rst}
+.. automodule:: beltrami_jax.nonlinear
+   :members:
+```
+
+## Input and output helpers
+
+```{eval-rst}
+.. automodule:: beltrami_jax.io
+   :members:
+```
+
 ## Diagnostics helpers
 
 ```{eval-rst}

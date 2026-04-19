@@ -1,8 +1,8 @@
 # beltrami_jax
 
-`beltrami_jax` is a differentiable JAX implementation of the dense linear Beltrami solve used in SPEC/SPECTRE-style multi-region relaxed MHD workflows.
+`beltrami_jax` is a differentiable JAX implementation of the Beltrami workflow used in SPEC/SPECTRE-style multi-region relaxed MHD problems.
 
-The package currently reproduces the linear operator solve
+The package reproduces the core operator solve
 
 $$
 \mathbf{M}\mathbf{a} = \mathbf{r},
@@ -10,7 +10,7 @@ $$
 \mathbf{M} = \mathbf{A} - \mu \mathbf{D},
 $$
 
-and validates it against dense systems dumped from SPEC.
+and now supports both dumped-SPEC regression and an internal geometry-driven path that assembles the system, updates `mu`, and postprocesses the solution.
 
 ```{toctree}
 :maxdepth: 2
@@ -27,17 +27,19 @@ references
 
 ## Scope
 
-The repository is intentionally focused on the discrete linear stage of the Beltrami solve:
+The repository currently covers the supported Beltrami workflow:
 
 - typed system representation
+- internal Fourier geometry assembly
 - operator and right-hand-side assembly
-- dense JAX solve
+- dense and GMRES solves
+- a helicity-constrained outer update for `mu`
 - diagnostics and benchmark helpers
 - vectorized parameter scans
 - autodifferentiation through solved states
 - regression testing against SPEC fixtures
 
-It does not yet include all of SPEC or the full outer equilibrium iteration.
+It does not yet include all of SPEC or all SPECTRE-specific integration details.
 
 ## Quick links
 

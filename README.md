@@ -1,15 +1,17 @@
 # beltrami_jax
 
-`beltrami_jax` is a differentiable JAX implementation of the SPEC/SPECTRE-style linear Beltrami solve used inside multi-region relaxed MHD workflows.
+`beltrami_jax` is a differentiable JAX implementation of the SPEC/SPECTRE-style Beltrami workflow used inside multi-region relaxed MHD calculations.
 
-The current repository scope is intentionally narrow and explicit:
+The repository now covers the full supported Beltrami path inside `beltrami_jax` itself:
 
-- reproduce the dense linear algebra at the core of SPEC's Beltrami stage
-- expose it through a compact JAX API
-- validate it against real dumped SPEC systems
-- make it easy to differentiate, vectorize, document, and test
+- internal Fourier geometry and integral assembly that produces SPEC-style `A`, `D`, `B`, and optional vacuum forcing terms
+- dense and GMRES linear solves, including matrix-free GMRES usage
+- an outer helicity-constrained nonlinear update loop for the Beltrami multiplier `mu`
+- axis-regularized basis construction for coordinate-singularity-safe internal assembly
+- validation against real dumped SPEC systems
+- vectorization, autodiff, diagnostics, benchmarks, and standalone example workflows
 
-This is not yet a full port of SPEC, and it is not yet a full port of SPECTRE. It is the linear Beltrami solve kernel plus the tooling around it.
+This is still not a full port of all of SPEC or SPECTRE, but the package is no longer limited to pre-dumped linear systems.
 
 ## Motivation
 
@@ -35,28 +37,30 @@ which, after geometry-dependent assembly, becomes a linear system
 \mathbf{M} = \mathbf{A} - \mu \mathbf{D}.
 ```
 
-`beltrami_jax` focuses on this linear stage.
+`beltrami_jax` now supports both:
+
+- direct regression against dumped SPEC linear systems
+- internally assembled geometry-driven Beltrami solves that go from input geometry to nonlinear `mu` update, output files, and postprocessing
 
 ## Implemented scope
 
 Today the repository includes:
 
 - a typed `BeltramiLinearSystem` container
+- internal Fourier geometry assembly via `assemble_fourier_beltrami_system`
 - operator assembly for plasma and vacuum branches
-- a dense JAX solve path with residual reporting
+- dense and GMRES solve paths with residual reporting
+- matrix-free GMRES through `gmres_solve`
+- a high-level `BeltramiProblem` input model with JSON save/load helpers
+- an outer helicity-constrained nonlinear solve via `solve_helicity_constrained_equilibrium`
+- coordinate-singularity-safe basis construction via `build_fourier_mode_basis`
 - diagnostic helpers for conditioning, symmetry, and solution amplification
 - benchmark helpers for steady-state solves and batched parameter scans
 - vectorized parameter scans in `mu`
 - autodifferentiation through the solved state
 - packaged SPEC regression fixtures covering cylindrical, toroidal, 3D, and vacuum branches
-- tests that compare the JAX solve to the dumped SPEC system
-
-The current implementation intentionally does not yet include:
-
-- geometry/integral assembly corresponding to `ma00aa.f90`
-- sparse or matrix-free Krylov solvers
-- the outer nonlinear constraint loop corresponding to `ma02aa.f90`
-- coordinate-singularity-specific branches beyond the current linear operator interface
+- standalone example workflows that define geometries, write input files, run solves, save outputs, and generate figures
+- tests that cover dumped SPEC systems and the internal geometry-driven workflow
 
 ## Installation
 
@@ -85,29 +89,31 @@ Run the test suite:
 ./.venv/bin/python -m pytest
 ```
 
-Solve the packaged SPEC fixture:
+Run the SPEC regression example:
 
 ```bash
 ./.venv/bin/python examples/solve_spec_fixture.py
 ```
 
-Scan over `mu` values:
+Run the geometry-defined Beltrami workflow and postprocess a parameter scan:
 
 ```bash
 ./.venv/bin/python examples/parameter_scan.py
 ```
 
-Differentiate magnetic energy with respect to `mu`:
+Run the geometry-defined autodiff example:
 
 ```bash
 ./.venv/bin/python examples/autodiff_mu.py
 ```
 
-Run a lightweight benchmark example:
+Run the vacuum/GMRES benchmark and export example:
 
 ```bash
 ./.venv/bin/python examples/benchmark_fixtures.py
 ```
+
+The example scripts are intentionally standalone. Each script keeps its input parameters at the top, writes files under `examples/_generated/`, prints progress to the terminal, and generates at least one figure or exported data product.
 
 ## Validation figures
 
@@ -157,6 +163,21 @@ Together these fixtures verify:
 - end-to-end timing behavior across fixture sizes
 
 The current committed validation set reaches solution-relative agreement at or below roughly `1e-15` across the packaged SPEC fixtures, while the measured operator 2-norm condition numbers span approximately `2.6e4` to `5.4e7`.
+
+## Internal Beltrami workflow
+
+In addition to SPEC-regression fixtures, the package now exposes an internal geometry-driven workflow:
+
+- define a `FourierBeltramiGeometry`
+- build a packed basis with `build_fourier_mode_basis`
+- assemble the SPEC-style matrices with `assemble_fourier_beltrami_system`
+- package the setup into a `BeltramiProblem`
+- save or reload the problem with `save_problem_json` / `load_problem_json`
+- solve the outer helicity-constrained problem with `solve_helicity_constrained_equilibrium`
+- export outputs with `save_nonlinear_solution`
+- postprocess with diagnostics, parameter scans, autodiff, and custom figures
+
+That is the path used by the new standalone examples and it is the package’s current answer to the Beltrami functionality that future SPECTRE integration will need.
 
 ## Generating new fixtures from SPEC
 

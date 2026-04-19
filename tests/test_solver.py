@@ -74,6 +74,15 @@ def test_vacuum_rhs_path_uses_dmg() -> None:
     np.testing.assert_allclose(np.asarray(result.operator @ result.solution), expected_rhs, rtol=1e-12, atol=1e-12)
 
 
+def test_gmres_matches_dense_fixture_solution() -> None:
+    reference = load_packaged_reference("g1v03l0fi_lvol2")
+    dense = solve_from_components(reference.system, method="dense")
+    gmres = solve_from_components(reference.system, method="gmres", tolerance=1.0e-12, max_iterations=reference.system.size)
+    np.testing.assert_allclose(np.asarray(gmres.solution), np.asarray(dense.solution), rtol=1e-9, atol=1e-9)
+    assert gmres.iterations is not None
+    assert float(gmres.relative_residual_norm) < 1e-9
+
+
 def test_verbose_solve_reports_progress(capsys: pytest.CaptureFixture[str]) -> None:
     reference = load_packaged_reference()
     result = solve_from_components(reference.system, verbose=True)

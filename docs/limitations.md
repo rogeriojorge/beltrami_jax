@@ -6,24 +6,26 @@ The current package is deliberately narrower than the long-term project goal.
 
 ### Not a full SPEC port
 
-`beltrami_jax` does not yet reconstruct the geometry-dependent matrix assembly performed upstream in SPEC. It assumes that the dense matrices and vectors are already available.
+`beltrami_jax` now includes an internal geometry/integral assembly path, a GMRES path, and a helicity-constrained outer loop, but it still does not match every branch and auxiliary structure in SPEC's Fortran implementation.
 
 ### Not a full SPECTRE port
 
 The package is intended as a candidate Beltrami kernel for future SPECTRE integration, but it is not yet wired into SPECTRE and does not yet match any final SPECTRE API contract.
 
-### Dense-only linear algebra
+### Limited linear-algebra coverage
 
-The current solve path uses dense `jax.numpy.linalg.solve`. This is useful for exact regression and autodiff, but may not be sufficient for larger systems where sparse or iterative strategies become important.
+The package now supports dense solves and a compact GMRES implementation, including matrix-free usage. It still does not provide a production sparse backend or the full solver menu present in mature equilibrium codes.
 
 ### Limited branch coverage
 
 The current implementation supports:
 
-- the standard dense plasma branch
-- a vacuum right-hand-side branch via `d_mg`
+- plasma and vacuum right-hand-side branches
+- internal axis-regularized Fourier assembly
+- dense and GMRES solve paths
+- an outer helicity-constrained nonlinear update
 
-It does not yet cover every branch and auxiliary matrix path present in SPEC's legacy Fortran, such as coordinate-singularity-specific terms and matrix-free solver paths.
+It does not yet cover every branch and auxiliary matrix path present in SPEC's legacy Fortran.
 
 ### Limited fixture diversity
 
@@ -35,13 +37,13 @@ The near-term roadmap is:
 
 1. enable and verify the hosted Read the Docs project
 2. add more dumped SPEC fixtures
-3. add a higher-level integration-oriented solve API
-4. broaden benchmarks beyond the current dense-regression fixture set
-5. evaluate sparse and matrix-free directions once the dense baseline is frozen
+3. add a higher-level integration-oriented solve API aimed directly at SPECTRE
+4. broaden benchmarks beyond the current dense-regression and compact internal-geometry cases
+5. add broader SPEC/SPECTRE parity tests for branch-specific geometry terms
 
 ## Medium-term technical directions
 
-Once the dense regression baseline is stable across more fixtures, the next technical candidates are:
+Once the current regression and internal-assembly baseline is stable across more fixtures, the next technical candidates are:
 
 - sparse linear algebra
 - matrix-free operators
@@ -52,7 +54,8 @@ Once the dense regression baseline is stable across more fixtures, the next tech
 
 It is easy to overstate progress on a project like this. The correct current statement is:
 
-- the dense linear Beltrami kernel has been reproduced and regression-tested against multiple SPEC dumps, including plasma and vacuum cases
-- the larger equilibrium workflow has not yet been ported
+- the package now supports a full internal Beltrami workflow for its current Fourier-geometry model
+- the linear kernel has also been regression-tested against multiple SPEC dumps, including plasma and vacuum cases
+- exact parity with all SPEC/SPECTRE branches still remains future work
 
 That distinction matters for both scientific correctness and future integration planning.

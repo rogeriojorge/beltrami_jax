@@ -413,9 +413,7 @@ Deferred for later:
 - direct use of `equinox`
 - direct use of `lineax`
 - sparse operators
-- matrix-free iterative solvers
-- full geometry/integral assembly corresponding to `ma00aa.f90`
-- outer nonlinear constraint solve corresponding to `ma02aa.f90`
+- broader SPEC/SPECTRE branch parity beyond the current internal Fourier-geometry model
 
 ## 8. Current Status of the `beltrami_jax` Repository
 
@@ -423,6 +421,10 @@ What exists:
 
 - package skeleton
 - typed linear-system API
+- internal Fourier geometry assembly API
+- GMRES / matrix-free iterative solve API
+- outer helicity-constrained nonlinear solve API
+- JSON/NPZ input-output helpers for standalone workflows
 - dense JAX solve
 - helper operators
 - diagnostics helpers for operator quality and agreement metrics
@@ -768,8 +770,7 @@ Technical risks:
 - dense direct solve may be too limited for larger production-scale systems
 - JAX linear solve behavior and performance may vary by backend
 - a later SPECTRE interface may not exactly match SPEC's packing conventions
-- current implementation does not yet cover coordinate-singularity-specific branches
-- current implementation does not yet cover the outer nonlinear constraint solve
+- the current internal geometry model is still simpler than full SPEC/SPECTRE branch coverage
 
 Project risk:
 
@@ -779,7 +780,8 @@ Project risk:
 Current honest status:
 
 - the linear solve kernel, diagnostics helpers, benchmark helpers, and validation figures are implemented and regression-tested against multiple dumped SPEC systems
-- the repository now includes docs sources, figures, benchmark assets, and CI definitions, but it is not yet complete enough to call finished
+- the repository now also includes internal geometry assembly, GMRES, an outer helicity-constrained solve, standalone workflow examples, docs sources, figures, benchmark assets, and CI definitions
+- exact parity with all SPEC/SPECTRE branches is still future work
 
 ## 17. Restart From Scratch Checklist
 
@@ -1126,6 +1128,58 @@ Publication status:
     - `docs` passed
     - `test (3.11)` passed
     - `test (3.13)` passed
+
+### 2026-04-18: internal geometry assembly, GMRES, nonlinear solve, standalone workflows, and dependency cleanup
+
+Completed:
+
+- expanded `src/beltrami_jax/types.py` with:
+  - `FourierBeltramiGeometry`
+  - `FourierModeBasis`
+  - `GeometryAssemblyResult`
+  - `BeltramiProblem`
+  - `IterativeSolveResult`
+  - `NonlinearSolveResult`
+- added new public modules:
+  - `src/beltrami_jax/geometry.py`
+  - `src/beltrami_jax/iterative.py`
+  - `src/beltrami_jax/nonlinear.py`
+  - `src/beltrami_jax/io.py`
+- updated `src/beltrami_jax/solver.py` to support both dense and GMRES solve paths
+- rewrote the example scripts as standalone parameter-at-the-top workflows:
+  - `examples/solve_spec_fixture.py`
+  - `examples/parameter_scan.py`
+  - `examples/autodiff_mu.py`
+  - `examples/benchmark_fixtures.py`
+- examples now write generated inputs, outputs, and figures under `examples/_generated/`
+- removed version pins from the runtime and optional dependencies in `pyproject.toml`
+- updated README and docs to describe the broader Beltrami workflow instead of only the dumped-linear-system path
+
+Important design decisions:
+
+- the internal assembly uses an axis-regularized Fourier large-aspect-ratio torus so the package has a fully internal Beltrami workflow without pretending to be exact full-SPEC geometry parity
+- the nonlinear update is currently helicity-constrained and secant-based because that gives a compact, testable analogue of the outer Beltrami loop
+- the standalone examples avoid `argparse`, `main()`, and helper-file indirection; all user-facing parameters are declared at the top of each script
+- the default SPEC example was switched to the compact `g1v03l0fi_lvol2` fixture so CI smoke tests stay fast while still covering dense, GMRES, and matrix-free agreement
+
+Validation results:
+
+- tests:
+  - `./.venv/bin/python -m pytest`
+  - outcome:
+    - `28 passed in 39.99s`
+    - `Total coverage: 96.10%`
+- docs build:
+  - `./.venv/bin/python -m sphinx -b html -W docs docs/_build/html`
+  - outcome:
+    - build succeeded
+- example smoke checks:
+  - `./.venv/bin/python examples/solve_spec_fixture.py`
+  - `./.venv/bin/python examples/parameter_scan.py`
+  - `./.venv/bin/python examples/autodiff_mu.py`
+  - `./.venv/bin/python examples/benchmark_fixtures.py`
+  - outcome:
+    - all completed and wrote outputs under `examples/_generated/`
 
 ## 19. Notes For Future Updates
 

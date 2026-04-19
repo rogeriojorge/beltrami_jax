@@ -128,13 +128,13 @@ and solves them in parallel across a batch index.
 
 Because the solve is written in JAX primitives, scalar objectives depending on the solved state can be differentiated. The repository's example and tests differentiate magnetic energy with respect to `mu`.
 
-## What is not yet modeled
+## Current theory-to-code boundary
 
-The current theory-to-code map stops at the dense linear operator level. It does not yet reconstruct:
+The repository now covers the supported Beltrami workflow end to end:
 
-- geometry integrals from `ma00aa.f90`
-- outer nonlinear constraint updates from `ma02aa.f90`
-- matrix-free or GMRES branches from `mp00ac.f90`
-- coordinate-singularity-specific terms involving additional matrices such as `dME`
+- internal geometry/integral assembly for a Fourier large-aspect-ratio torus
+- dense and GMRES linear solves
+- a helicity-constrained outer update for `mu`
+- axis-regularized basis handling near the coordinate singularity
 
-That boundary is intentional. The current package solves the most reusable and testable part first.
+What still remains outside the current implementation is exact parity with every SPEC/SPECTRE branch, including additional auxiliary matrices and branch-specific geometric terms that appear in the legacy Fortran.

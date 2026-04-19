@@ -24,24 +24,41 @@ The solution vector $\mathbf{a}$ contains packed vector-potential coefficients. 
 
 ## Implemented model in `beltrami_jax`
 
-The current package starts at the point where the geometry-dependent matrices are already available. That is the correct boundary for the first JAX port because it isolates the linear algebra that SPECTRE can reuse without first reimplementing the entire geometry/integration machinery of SPEC.
+The package now supports two complementary workflows:
+
+- dumped SPEC regression, where the geometry-dependent matrices are loaded from a SPEC export
+- internal Fourier-geometry assembly, where `beltrami_jax` builds the matrices itself and then runs the same solve machinery
 
 The package currently provides:
 
 - `BeltramiLinearSystem`
   - holds the dense matrices and metadata required for the solve
+- `FourierBeltramiGeometry`
+  - parameterizes a shaped large-aspect-ratio torus used for internal assembly
+- `build_fourier_mode_basis`
+  - constructs a packed cosine/sine basis with axis-safe radial powers
+- `assemble_fourier_beltrami_system`
+  - assembles internal `A`, `D`, `B`, and optional vacuum forcing terms
 - `assemble_operator`
   - constructs $\mathbf{M}$
 - `assemble_rhs`
   - constructs $\mathbf{r}$ for plasma and vacuum branches
 - `solve_from_components`
   - assembles, solves, and returns diagnostics
+- `gmres_solve`
+  - provides a Krylov solve for dense or matrix-free operators
+- `BeltramiProblem`
+  - wraps geometry, basis, fluxes, and nonlinear target data
+- `solve_helicity_constrained_equilibrium`
+  - performs the outer nonlinear `mu` update to match a target helicity
 - `solve_parameter_scan`
   - vectorized batched dense solves over varying `mu` and `psi`
 - `load_spec_text_dump`
   - loads raw text exports from a SPEC run
 - `load_packaged_reference`
   - loads a committed `.npz` regression fixture
+- `save_problem_json`, `load_problem_json`, `save_nonlinear_solution`
+  - handle user-facing input and output files for standalone workflows
 
 ## What is inside a `BeltramiLinearSystem`
 
@@ -66,9 +83,9 @@ The dataclass stores:
 
 The current implementation makes a few deliberate choices.
 
-### Dense first
+### Dense plus GMRES
 
-SPEC supports more than one solve path, including iterative solvers. The initial JAX port keeps the model dense and exact because that is the cleanest path for validating operator assembly against dumped SPEC matrices.
+The package keeps the dense direct solve because it is the cleanest path for exact regression against dumped SPEC matrices, and it now also exposes a compact GMRES implementation for Krylov and matrix-free workflows.
 
 ### X64 enabled
 
@@ -80,11 +97,10 @@ The example scripts print progress and diagnostics. This is intentional. The goa
 
 ## Current limitations
 
-This package does not yet perform:
+This package now performs internal geometry assembly, Krylov solves, and a helicity-constrained outer loop, but it still does not cover:
 
-- geometry/integral assembly from boundary/interface information
-- nonlinear constraint updates
-- rotational-transform or current-constraint iterations
-- sparse scaling strategies for larger systems
+- every SPEC/SPECTRE branch and auxiliary matrix path
+- full sparse production scaling
+- the broader equilibrium and constraint machinery beyond the supported Beltrami workflow
 
 Those topics are documented in {doc}`limitations`.

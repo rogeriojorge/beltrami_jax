@@ -12,10 +12,17 @@ from jax import Array
 from jax.typing import ArrayLike
 
 from .spectre_backend import SpectreBackendSolve, solve_spectre_assembled
+from .spectre_constraints import (
+    SpectreLocalConstraintEvaluation,
+    evaluate_spectre_helicity_constraint,
+    evaluate_spectre_local_constraints,
+    spectre_local_unknown_count,
+)
+from .spectre_diagnostics import compute_spectre_plasma_current
 from .spectre_input import SpectreInputSummary, load_spectre_input_toml
 from .spectre_io import SpectreVectorPotential
 from .spectre_matrix import SpectreBoundaryNormalField
-from .spectre_pack import build_spectre_dof_layout
+from .spectre_pack import SpectreVolumeDofMap, build_spectre_dof_layout
 from .spectre_volume_matrix import SpectreVolumeMatrices, assemble_spectre_volume_matrices_from_input
 
 _PI2 = 2.0 * np.pi
@@ -29,6 +36,8 @@ class SpectreVolumeSolve:
     matrices: SpectreVolumeMatrices
     solve: SpectreBackendSolve
     vector_potential: SpectreVectorPotential
+    derivative_vector_potentials: tuple[SpectreVectorPotential, SpectreVectorPotential]
+    constraint: SpectreLocalConstraintEvaluation | None
     mu: Array
     psi: Array
     is_vacuum: bool
@@ -145,6 +154,184 @@ def _volume_mu(summary: SpectreInputSummary, *, lvol: int, mu: ArrayLike | None)
     return jnp.asarray(values[lvol - 1], dtype=jnp.float64)
 
 
+def _unpack_derivative_vector_potentials(
+    volume_map: SpectreVolumeDofMap,
+    solve: SpectreBackendSolve,
+    *,
+    source: str,
+) -> tuple[SpectreVectorPotential, SpectreVectorPotential]:
+    return (
+        volume_map.unpack_solution(np.asarray(solve.derivative_solutions[0]), source=f"{source}:derivative0"),
+        volume_map.unpack_solution(np.asarray(solve.derivative_solutions[1]), source=f"{source}:derivative1"),
+    )
+
+
+def _solve_assembled_volume(
+    matrices: SpectreVolumeMatrices,
+    *,
+    mu: Array,
+    psi: Array,
+    is_vacuum: bool,
+    include_d_mg_in_rhs: bool,
+) -> SpectreBackendSolve:
+    return solve_spectre_assembled(
+        d_ma=matrices.d_ma,
+        d_md=matrices.d_md,
+        d_mb=matrices.d_mb,
+        d_mg=matrices.d_mg,
+        mu=mu,
+        psi=psi,
+        is_vacuum=is_vacuum,
+        include_d_mg_in_rhs=include_d_mg_in_rhs,
+    )
+
+
+def _newton_settings(summary: SpectreInputSummary, *, max_constraint_iterations: int | None) -> tuple[int, float]:
+    iterations = int(max_constraint_iterations) if max_constraint_iterations is not None else 12
+    if iterations < 1:
+        raise ValueError("max_constraint_iterations must be positive")
+    tolerance = abs(float(summary.global_options.get("c05xtol", summary.global_options.get("forcetol", 1.0e-12))))
+    return iterations, max(tolerance, 1.0e-14)
+
+
+def _solve_lconstraint2_mu(
+    summary: SpectreInputSummary,
+    *,
+    lvol: int,
+    volume_map: SpectreVolumeDofMap,
+    matrices: SpectreVolumeMatrices,
+    mu: Array,
+    psi: Array,
+    is_vacuum: bool,
+    include_d_mg_in_rhs: bool,
+    max_constraint_iterations: int | None,
+    verbose: bool,
+) -> tuple[Array, Array, SpectreBackendSolve, SpectreLocalConstraintEvaluation]:
+    iterations, tolerance = _newton_settings(summary, max_constraint_iterations=max_constraint_iterations)
+    mu_value = jnp.asarray(mu, dtype=jnp.float64)
+    psi_value = jnp.asarray(psi, dtype=jnp.float64)
+    last_solve: SpectreBackendSolve | None = None
+    last_constraint: SpectreLocalConstraintEvaluation | None = None
+    for iteration in range(iterations):
+        last_solve = _solve_assembled_volume(
+            matrices,
+            mu=mu_value,
+            psi=psi_value,
+            is_vacuum=is_vacuum,
+            include_d_mg_in_rhs=include_d_mg_in_rhs,
+        )
+        last_constraint = evaluate_spectre_helicity_constraint(
+            summary,
+            lvol=lvol,
+            volume_map=volume_map,
+            solve=last_solve,
+            d_md=matrices.d_md,
+        )
+        residual = float(last_constraint.residual[0])
+        jacobian = float(last_constraint.jacobian[0, 0])
+        if verbose:
+            print(
+                "[beltrami_jax] local Lconstraint=2 Newton "
+                f"lvol={lvol} iter={iteration} mu={float(mu_value):.12e} "
+                f"residual={residual:.3e} jacobian={jacobian:.3e}"
+            )
+        if abs(residual) <= tolerance:
+            return mu_value, psi_value, last_solve, last_constraint
+        if abs(jacobian) <= 1.0e-300:
+            raise RuntimeError(f"Lconstraint=2 Newton jacobian is singular for lvol={lvol}")
+        mu_value = jnp.asarray(float(mu_value) - residual / jacobian, dtype=jnp.float64)
+    assert last_solve is not None and last_constraint is not None
+    raise RuntimeError(
+        f"Lconstraint=2 Newton did not converge for lvol={lvol}: "
+        f"residual={float(last_constraint.residual_norm):.3e}, tolerance={tolerance:.3e}"
+    )
+
+
+def _current_diagnostic_options(summary: SpectreInputSummary, volume_map: SpectreVolumeDofMap) -> tuple[int, bool]:
+    lconstraint = int(summary.constraints["lconstraint"])
+    if volume_map.coordinate_singularity and lconstraint == -2:
+        return 1, not bool(summary.physics.get("lbdybnzero", True))
+    return 0, False
+
+
+def _solve_current_constraint(
+    summary: SpectreInputSummary,
+    *,
+    lvol: int,
+    volume_map: SpectreVolumeDofMap,
+    matrices: SpectreVolumeMatrices,
+    mu: Array,
+    psi: Array,
+    is_vacuum: bool,
+    include_d_mg_in_rhs: bool,
+    max_constraint_iterations: int | None,
+    nt: int | None,
+    nz: int | None,
+    verbose: bool,
+) -> tuple[Array, Array, SpectreBackendSolve, SpectreLocalConstraintEvaluation]:
+    iterations, tolerance = _newton_settings(summary, max_constraint_iterations=max_constraint_iterations)
+    mu_value = jnp.asarray(mu, dtype=jnp.float64)
+    psi_value = jnp.asarray(psi, dtype=jnp.float64)
+    innout, include_radial_field = _current_diagnostic_options(summary, volume_map)
+    last_solve: SpectreBackendSolve | None = None
+    last_constraint: SpectreLocalConstraintEvaluation | None = None
+    for iteration in range(iterations):
+        last_solve = _solve_assembled_volume(
+            matrices,
+            mu=mu_value,
+            psi=psi_value,
+            is_vacuum=is_vacuum,
+            include_d_mg_in_rhs=include_d_mg_in_rhs,
+        )
+        vector_potential = volume_map.unpack_solution(np.asarray(last_solve.solution), source=f"{summary.source}:lvol{lvol}")
+        derivative_vector_potentials = _unpack_derivative_vector_potentials(
+            volume_map,
+            last_solve,
+            source=f"{summary.source}:lvol{lvol}",
+        )
+        currents = compute_spectre_plasma_current(
+            summary,
+            lvol=lvol,
+            vector_potential=vector_potential,
+            derivative_vector_potentials=derivative_vector_potentials,
+            volume_map=volume_map,
+            innout=innout,
+            nt=nt,
+            nz=nz,
+            include_radial_field=include_radial_field,
+        )
+        last_constraint = evaluate_spectre_local_constraints(
+            summary,
+            lvol=lvol,
+            volume_map=volume_map,
+            solve=last_solve,
+            currents=currents,
+        )
+        residual = np.asarray(last_constraint.residual, dtype=np.float64)
+        jacobian = np.asarray(last_constraint.jacobian, dtype=np.float64)
+        residual_norm = float(np.max(np.abs(residual))) if residual.size else 0.0
+        if verbose:
+            print(
+                "[beltrami_jax] local current Newton "
+                f"lvol={lvol} iter={iteration} psi=({float(psi_value[0]):.12e}, {float(psi_value[1]):.12e}) "
+                f"residual={residual_norm:.3e}"
+            )
+        if residual_norm <= tolerance:
+            return mu_value, psi_value, last_solve, last_constraint
+        if jacobian.shape == (1, 1):
+            step = np.asarray([residual[0] / jacobian[0, 0], 0.0], dtype=np.float64)
+        else:
+            step = np.linalg.solve(jacobian, residual)
+        psi_np = np.asarray(psi_value, dtype=np.float64).copy()
+        psi_np[: step.size] -= step
+        psi_value = jnp.asarray(psi_np, dtype=jnp.float64)
+    assert last_solve is not None and last_constraint is not None
+    raise RuntimeError(
+        f"current-constraint Newton did not converge for lvol={lvol}: "
+        f"residual={float(last_constraint.residual_norm):.3e}, tolerance={tolerance:.3e}"
+    )
+
+
 def solve_spectre_volume_from_input(
     summary: SpectreInputSummary,
     *,
@@ -155,6 +342,8 @@ def solve_spectre_volume_from_input(
     quadrature_size: int | None = None,
     nt: int | None = None,
     nz: int | None = None,
+    solve_local_constraints: bool = False,
+    max_constraint_iterations: int | None = None,
     verbose: bool = False,
 ) -> SpectreVolumeSolve:
     """Assemble, solve, and unpack one SPECTRE Beltrami volume from TOML data.
@@ -187,17 +376,72 @@ def solve_spectre_volume_from_input(
             f"lvol={lvol} size={volume_map.solution_size} vacuum={volume_map.vacuum_region} "
             f"mu={float(mu_value):.12e} psi=({float(psi_value[0]):.12e}, {float(psi_value[1]):.12e})"
         )
-    solve = solve_spectre_assembled(
-        d_ma=matrices.d_ma,
-        d_md=matrices.d_md,
-        d_mb=matrices.d_mb,
-        d_mg=matrices.d_mg,
-        mu=mu_value,
-        psi=psi_value,
-        is_vacuum=volume_map.vacuum_region,
-        include_d_mg_in_rhs=include_d_mg_in_rhs,
-    )
+    constraint: SpectreLocalConstraintEvaluation | None = None
+    if solve_local_constraints:
+        unknown_count = spectre_local_unknown_count(summary, volume_map)
+        if unknown_count == 0:
+            solve = _solve_assembled_volume(
+                matrices,
+                mu=mu_value,
+                psi=psi_value,
+                is_vacuum=volume_map.vacuum_region,
+                include_d_mg_in_rhs=include_d_mg_in_rhs,
+            )
+            constraint = evaluate_spectre_local_constraints(
+                summary,
+                lvol=lvol,
+                volume_map=volume_map,
+                solve=solve,
+            )
+        elif lconstraint == 2 and volume_map.plasma_region:
+            mu_value, psi_value, solve, constraint = _solve_lconstraint2_mu(
+                summary,
+                lvol=lvol,
+                volume_map=volume_map,
+                matrices=matrices,
+                mu=mu_value,
+                psi=psi_value,
+                is_vacuum=volume_map.vacuum_region,
+                include_d_mg_in_rhs=include_d_mg_in_rhs,
+                max_constraint_iterations=max_constraint_iterations,
+                verbose=verbose,
+            )
+        elif (lconstraint == -2 and volume_map.plasma_region) or (lconstraint == 0 and volume_map.vacuum_region):
+            mu_value, psi_value, solve, constraint = _solve_current_constraint(
+                summary,
+                lvol=lvol,
+                volume_map=volume_map,
+                matrices=matrices,
+                mu=mu_value,
+                psi=psi_value,
+                is_vacuum=volume_map.vacuum_region,
+                include_d_mg_in_rhs=include_d_mg_in_rhs,
+                max_constraint_iterations=max_constraint_iterations,
+                nt=nt,
+                nz=nz,
+                verbose=verbose,
+            )
+        else:
+            raise NotImplementedError(
+                "JAX-native local constraint solve currently supports zero-unknown branches, "
+                "plasma Lconstraint=2 helicity, plasma Lconstraint=-2 current, and vacuum Lconstraint=0 current. "
+                f"Got lconstraint={lconstraint}, vacuum={volume_map.vacuum_region}, "
+                f"coordinate_singularity={volume_map.coordinate_singularity}."
+            )
+    else:
+        solve = _solve_assembled_volume(
+            matrices,
+            mu=mu_value,
+            psi=psi_value,
+            is_vacuum=volume_map.vacuum_region,
+            include_d_mg_in_rhs=include_d_mg_in_rhs,
+        )
     vector_potential = volume_map.unpack_solution(np.asarray(solve.solution), source=f"{summary.source}:lvol{lvol}")
+    derivative_vector_potentials = _unpack_derivative_vector_potentials(
+        volume_map,
+        solve,
+        source=f"{summary.source}:lvol{lvol}",
+    )
     if verbose:
         print(
             "[beltrami_jax] SPECTRE volume solve complete "
@@ -208,6 +452,8 @@ def solve_spectre_volume_from_input(
         matrices=matrices,
         solve=solve,
         vector_potential=vector_potential,
+        derivative_vector_potentials=derivative_vector_potentials,
+        constraint=constraint,
         mu=mu_value,
         psi=psi_value,
         is_vacuum=volume_map.vacuum_region,
@@ -271,6 +517,8 @@ def solve_spectre_volumes_from_input(
     quadrature_size: int | None = None,
     nt: int | None = None,
     nz: int | None = None,
+    solve_local_constraints: bool = False,
+    max_constraint_iterations: int | None = None,
     verbose: bool = False,
 ) -> SpectreMultiVolumeSolve:
     """Solve all selected SPECTRE volumes from TOML/interface geometry.
@@ -314,6 +562,8 @@ def solve_spectre_volumes_from_input(
                 quadrature_size=quadrature_size,
                 nt=nt,
                 nz=nz,
+                solve_local_constraints=solve_local_constraints,
+                max_constraint_iterations=max_constraint_iterations,
                 verbose=verbose,
             )
         )

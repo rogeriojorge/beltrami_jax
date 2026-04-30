@@ -124,6 +124,10 @@ Current supported use:
 - assemble SPECTRE `dMA/dMD/dMB/dMG` volume matrices directly from TOML/interface geometry for the packaged validated branches
 - solve one SPECTRE volume from TOML/interface geometry and unpack directly to `Ate/Aze/Ato/Azo` with `solve_spectre_volume_from_input`
 - solve all packed SPECTRE volumes from TOML/interface geometry and return one full vector-potential block with `solve_spectre_volumes_from_input`
+- return SPECTRE branch derivative solutions, derivative residuals, magnetic energy, and magnetic helicity from the backend solve
+- compute SPECTRE-style plasma/linking current diagnostics from solved `Ate/Aze/Ato/Azo` coefficients
+- solve local zero-unknown branches and the JAX-native `Lconstraint=2` plasma helicity branch from TOML data
+- evaluate current-constraint Newton updates for the `Lconstraint=-2` plasma and `Lconstraint=0` vacuum branches once those branches are present in input data
 - load packaged public SPECTRE compare cases for reproducible CI validation
 - reconstruct SPECTRE's internal Fourier mode order and packed radial block layout
 - pack and unpack SPECTRE-compatible per-volume solution vectors to/from `Ate`, `Aze`, `Ato`, and `Azo`
@@ -131,6 +135,7 @@ Current supported use:
 - call a narrow JIT-backed backend adapter for already assembled SPECTRE Beltrami matrices
 - solve SPECTRE local Beltrami branches including derivative right-hand sides
 - evaluate the local `Lconstraint` residual/Jacobian table once transform/current diagnostics are supplied
+- inject a full `beltrami_jax` coefficient block into an experimental SPECTRE fork through `SPECTRE.solve_beltrami_jax(...)` and `spectre.set_vec_pot_flat(...)`
 - use the comparison tooling as the target contract for the future JAX-native backend
 
 Intended future use:
@@ -393,8 +398,8 @@ from a SPECTRE run, plus broader non-stellarator-symmetric fixture coverage.
 
 For a supported branch, `solve_spectre_volume_from_input` performs the local
 replacement workflow: read a `SpectreInputSummary`, assemble all four matrix
-ingredients, solve the local linear system, and unpack the result to
-SPECTRE-compatible `Ate/Aze/Ato/Azo` arrays.
+ingredients, solve the local linear system, compute branch derivative solves,
+and unpack the result to SPECTRE-compatible `Ate/Aze/Ato/Azo` arrays.
 
 ```python
 from beltrami_jax import load_spectre_input_toml, solve_spectre_volume_from_input
@@ -404,6 +409,7 @@ result = solve_spectre_volume_from_input(summary, lvol=2, verbose=True)
 
 print(result.solution.shape)
 print(result.vector_potential.ate.shape)
+print(result.derivative_vector_potentials[0].ate.shape)
 print(float(result.relative_residual_norm))
 ```
 
@@ -420,9 +426,25 @@ result = solve_spectre_volume_from_input(
 ```
 
 Without those overrides, the helper uses the normalized TOML initial state. That
-is the right user-facing default, but it will not reproduce a post-Newton
-SPECTRE fixture until the JAX transform/current diagnostics and nonlinear
-constraint loop are complete.
+is the right user-facing default. For `Lconstraint=2` plasma volumes, the helper
+can also run the local helicity Newton update directly:
+
+```python
+result = solve_spectre_volume_from_input(
+    summary,
+    lvol=2,
+    solve_local_constraints=True,
+    verbose=True,
+)
+print(result.mu)
+print(result.constraint.residual_norm)
+```
+
+The local-constraint path currently covers zero-unknown branches,
+`Lconstraint=2` plasma helicity, `Lconstraint=-2` plasma current, and
+`Lconstraint=0` vacuum current. Full SPECTRE parity still needs the
+rotational-transform diagnostic used by `Lconstraint=1` and the global/semi-global
+force-coupled updates used by `Lconstraint=3`.
 
 ## SPECTRE linear-system validation workflow
 
@@ -526,12 +548,28 @@ print(constraints.jacobian)
 This makes the branch contract testable before the geometry-derived field
 diagnostics are complete.
 
+The current SPECTRE current diagnostic is available directly from solved
+coefficients:
+
+```python
+from beltrami_jax import compute_spectre_plasma_current
+
+currents = compute_spectre_plasma_current(
+    summary,
+    lvol=2,
+    vector_potential=result.vector_potential,
+    derivative_vector_potentials=result.derivative_vector_potentials,
+)
+print(currents.currents)
+print(currents.derivative_currents)
+```
+
 ## Minimal SPECTRE backend adapter
 
-The smallest safe SPECTRE-side change is a thin optional adapter after SPECTRE
-has already assembled `dMA`, `dMD`, `dMB`, and `dMG`. It should not change
-SPECTRE's geometry representation, quadrature, matrix assembly, or default
-Fortran backend.
+There are now two deliberately narrow SPECTRE-side adapter levels.
+
+Level 1 keeps SPECTRE's geometry/matrix assembly and swaps only the dense solve.
+This remains useful as an incremental fallback when debugging SPECTRE internals.
 
 The adapter call looks like this on the Python side:
 
@@ -559,6 +597,59 @@ Recommended SPECTRE-side patch size:
 - Copy the returned solution vector into the same SPECTRE solution slot that `solve_beltrami_system` fills today.
 - Keep all existing Fortran branches, diagnostics, and tests active as the fallback path.
 
+Level 2 starts from SPECTRE TOML/interface geometry and lets `beltrami_jax`
+assemble and solve the coefficient block:
+
+```python
+from spectre import SPECTRE, get_vec_pot_flat
+
+obj = SPECTRE.from_input_file("input.toml")
+result = obj.solve_beltrami_jax(
+    solve_local_constraints=False,
+    update_fortran=True,
+    verbose=True,
+)
+ate, aze, ato, azo = get_vec_pot_flat(obj)
+print(result.max_relative_residual_norm)
+```
+
+The local SPECTRE fork currently implements this seam with:
+
+- `wrapper_funcs_mod.set_vec_pot`, the setter matching SPECTRE's existing `get_vec_pot`.
+- `spectre.utils.set_vec_pot_flat`, a Python shape-checking wrapper.
+- `spectre.beltrami_jax_backend.apply_beltrami_jax_solution`, which calls `beltrami_jax.solve_spectre_toml` and injects the full coefficient block.
+- `spectre.beltrami_jax_backend.solve_current_state_with_beltrami_jax`, which serializes the current in-memory SPECTRE interface state to a temporary TOML file and solves the geometry currently packed from `xin`.
+- `SPECTRE.solve_beltrami_jax(...)`, an experimental method with the Fortran backend still untouched as the default.
+- `force_real(..., beltrami_backend="jax")`, an opt-in Python force path that bypasses SPECTRE's Fortran Beltrami solve, injects the JAX coefficient block, and then uses SPECTRE's existing force diagnostic.
+
+The force-path usage is:
+
+```python
+from spectre import SPECTRE, force_real, get_xinit_specwrap
+
+obj = SPECTRE.from_input_file("input.toml", verbose=False)
+x = get_xinit_specwrap(obj)
+f = force_real(
+    x,
+    obj,
+    beltrami_backend="jax",
+    solve_local_constraints=True,
+)
+```
+
+This backend switch is serial-only in the local fork. MPI use raises a clear
+runtime error until the temporary-state handoff and coefficient injection are
+made rank-aware.
+
+Runtime seam validation from the local SPECTRE rebuild:
+
+- `G3V3L3Fi` coefficient injection has relative copy error `0.0` after `SPECTRE.solve_beltrami_jax(update_fortran=True)`.
+- `G3V3L2Fi_stability` reaches `1.25e-12` relative force agreement through `force_real(..., beltrami_backend="jax")`.
+- `G3V3L3Fi` remains at `1.67e-3` relative force error because the `Lconstraint=3` global/semi-global flux update is still open.
+- `G2V32L1Fi` remains at `2.41e-2` relative force error because the `Lconstraint=1` rotational-transform diagnostic is still open.
+
+![SPECTRE backend seam runtime validation](_static/spectre_backend_seam_runtime.png)
+
 Performance notes:
 
 - The core solve is JIT compiled by shape and branch flags.
@@ -568,6 +659,6 @@ Performance notes:
 
 ## Current boundary
 
-The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, SPECTRE matrix assembly, TOML-driven per-volume coefficient solves, and SPECTRE local branch/constraint models, but it is still not a full SPECTRE backend. The main remaining work is field diagnostics that produce transform/current constraints directly from solved JAX fields and the nonlinear update loop that removes final `mu`/flux injection.
+The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, SPECTRE matrix assembly, TOML-driven per-volume coefficient solves, SPECTRE current diagnostics, and the first local constraint updates. It is still not a complete SPECTRE backend because rotational-transform diagnostics and the global/semi-global force-coupled constraint updates are still open.
 
 See the root-level `SPECTRE_MIGRATION_PLAN.md` for the current SPECTRE replacement plan.

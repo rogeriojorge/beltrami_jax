@@ -9,6 +9,11 @@ import numpy as np
 from jax import Array
 from jax.typing import ArrayLike
 
+from .spectre_backend import SpectreBackendSolve
+from .spectre_diagnostics import SpectrePlasmaCurrentDiagnostic
+from .spectre_input import SpectreInputSummary
+from .spectre_pack import SpectreVolumeDofMap
+
 
 SUPPORTED_LCONSTRAINTS = (-2, -1, 0, 1, 2, 3)
 
@@ -78,6 +83,35 @@ class SpectreConstraintEvaluation:
     unknowns: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class SpectreRotationalTransformDiagnostic:
+    """Rotational-transform values and local derivatives on inner/outer faces."""
+
+    iota: Array
+    derivative_iota: Array
+
+
+@dataclass(frozen=True)
+class SpectreLocalConstraintEvaluation:
+    """Residual/Jacobian for one SPECTRE local ``Lconstraint`` branch."""
+
+    lvol: int
+    lconstraint: int
+    unknown_count: int
+    residual: Array
+    jacobian: Array
+    magnetic_energy_integral: Array
+    magnetic_helicity_integral: Array
+
+    @property
+    def residual_norm(self) -> Array:
+        """Infinity norm of the local constraint residual."""
+
+        if self.residual.size == 0:
+            return jnp.asarray(0.0, dtype=jnp.float64)
+        return jnp.max(jnp.abs(self.residual))
+
+
 def _validate_lconstraint(lconstraint: int) -> None:
     if int(lconstraint) not in SUPPORTED_LCONSTRAINTS:
         raise ValueError(f"unsupported SPECTRE Lconstraint={lconstraint}; expected one of {SUPPORTED_LCONSTRAINTS}")
@@ -134,6 +168,16 @@ def spectre_branch_unknowns(
     if is_vacuum:
         return ("dtflux", "dpflux")[:count]
     return ("mu", "dpflux")[:count]
+
+
+def spectre_local_unknown_count(summary: SpectreInputSummary, volume_map: SpectreVolumeDofMap) -> int:
+    """Return SPECTRE's local nonlinear unknown count for one TOML volume."""
+
+    return spectre_constraint_dof_count(
+        lconstraint=int(summary.constraints["lconstraint"]),
+        is_vacuum=volume_map.vacuum_region,
+        coordinate_singularity=volume_map.coordinate_singularity,
+    )
 
 
 def _as_required_vector(
@@ -414,3 +458,156 @@ def evaluate_spectre_constraints(
         jacobian = jacobian.at[0, 0].set(helicity_derivatives[0])
 
     return SpectreConstraintEvaluation(residual=residual, jacobian=jacobian, unknowns=unknowns)
+
+
+def _fortran_1_index(values: tuple[float, ...], index: int, *, name: str) -> float:
+    if index < 1 or index > len(values):
+        raise ValueError(f"{name}({index}) is not available; got {len(values)} values")
+    return float(values[index - 1])
+
+
+def _zero_local_eval(
+    *,
+    summary: SpectreInputSummary,
+    volume_map: SpectreVolumeDofMap,
+    solve: SpectreBackendSolve,
+    lvol: int,
+) -> SpectreLocalConstraintEvaluation:
+    unknown_count = spectre_local_unknown_count(summary, volume_map)
+    return SpectreLocalConstraintEvaluation(
+        lvol=lvol,
+        lconstraint=int(summary.constraints["lconstraint"]),
+        unknown_count=unknown_count,
+        residual=jnp.zeros((unknown_count,), dtype=jnp.float64),
+        jacobian=jnp.zeros((unknown_count, unknown_count), dtype=jnp.float64),
+        magnetic_energy_integral=solve.magnetic_energy_integral,
+        magnetic_helicity_integral=solve.magnetic_helicity_integral,
+    )
+
+
+def evaluate_spectre_local_constraints(
+    summary: SpectreInputSummary,
+    *,
+    lvol: int,
+    volume_map: SpectreVolumeDofMap,
+    solve: SpectreBackendSolve,
+    transform: SpectreRotationalTransformDiagnostic | None = None,
+    currents: SpectrePlasmaCurrentDiagnostic | None = None,
+) -> SpectreLocalConstraintEvaluation:
+    """Evaluate SPECTRE local ``Lconstraint`` residuals/Jacobians from TOML data.
+
+    This is the SPECTRE-removal path counterpart of
+    :func:`evaluate_spectre_constraints`: targets are read from the parsed
+    SPECTRE input summary and diagnostics are supplied by JAX-native field
+    evaluators.
+    """
+
+    lconstraint = int(summary.constraints["lconstraint"])
+    unknown_count = spectre_local_unknown_count(summary, volume_map)
+    if unknown_count == 0:
+        return _zero_local_eval(summary=summary, volume_map=volume_map, solve=solve, lvol=lvol)
+
+    if lconstraint == -2 and volume_map.plasma_region:
+        if currents is None:
+            raise ValueError("Lconstraint=-2 requires plasma-current diagnostics")
+        curpol = float(summary.physics.get("curpol", 0.0))
+        residual = jnp.asarray([currents.poloidal_current - curpol], dtype=jnp.float64)
+        jacobian = jnp.asarray([[currents.derivative_currents[1, 0]]], dtype=jnp.float64)
+    elif lconstraint == 0 and volume_map.vacuum_region:
+        if currents is None:
+            raise ValueError("vacuum Lconstraint=0 requires plasma-current diagnostics")
+        curtor = float(summary.physics.get("curtor", 0.0))
+        curpol = float(summary.physics.get("curpol", 0.0))
+        residual = jnp.asarray(
+            [
+                currents.toroidal_current - curtor,
+                currents.poloidal_current - curpol,
+            ],
+            dtype=jnp.float64,
+        )
+        jacobian = currents.derivative_currents[:, :2]
+    elif lconstraint == 1:
+        if transform is None:
+            raise ValueError("Lconstraint=1 requires rotational-transform diagnostics")
+        iota = summary.constraints["iota"]
+        oita = summary.constraints["oita"]
+        if volume_map.plasma_region and volume_map.coordinate_singularity:
+            residual = jnp.asarray(
+                [transform.iota[1] - _fortran_1_index(iota, lvol, name="iota")],
+                dtype=jnp.float64,
+            )
+            jacobian = jnp.asarray([[transform.derivative_iota[1, 0]]], dtype=jnp.float64)
+        elif volume_map.plasma_region:
+            residual = jnp.asarray(
+                [
+                    transform.iota[0] - _fortran_1_index(oita, lvol - 1, name="oita"),
+                    transform.iota[1] - _fortran_1_index(iota, lvol, name="iota"),
+                ],
+                dtype=jnp.float64,
+            )
+            jacobian = transform.derivative_iota[:, :2]
+        else:
+            if currents is None:
+                raise ValueError("vacuum Lconstraint=1 requires current diagnostics")
+            curpol = float(summary.physics.get("curpol", 0.0))
+            residual = jnp.asarray(
+                [
+                    transform.iota[0] - _fortran_1_index(oita, lvol - 1, name="oita"),
+                    currents.poloidal_current - curpol,
+                ],
+                dtype=jnp.float64,
+            )
+            jacobian = jnp.asarray(
+                [
+                    [transform.derivative_iota[0, 0], transform.derivative_iota[0, 1]],
+                    [currents.derivative_currents[1, 0], currents.derivative_currents[1, 1]],
+                ],
+                dtype=jnp.float64,
+            )
+    elif lconstraint == 2 and volume_map.plasma_region:
+        raise ValueError("Lconstraint=2 requires evaluate_spectre_helicity_constraint with d_md")
+    else:
+        raise ValueError(
+            f"constraint branch lconstraint={lconstraint}, plasma={volume_map.plasma_region} "
+            "is not implemented without additional diagnostics"
+        )
+
+    return SpectreLocalConstraintEvaluation(
+        lvol=lvol,
+        lconstraint=lconstraint,
+        unknown_count=unknown_count,
+        residual=residual,
+        jacobian=jacobian,
+        magnetic_energy_integral=solve.magnetic_energy_integral,
+        magnetic_helicity_integral=solve.magnetic_helicity_integral,
+    )
+
+
+def evaluate_spectre_helicity_constraint(
+    summary: SpectreInputSummary,
+    *,
+    lvol: int,
+    volume_map: SpectreVolumeDofMap,
+    solve: SpectreBackendSolve,
+    d_md: Array,
+) -> SpectreLocalConstraintEvaluation:
+    """Evaluate the plasma ``Lconstraint=2`` helicity residual/Jacobian."""
+
+    lconstraint = int(summary.constraints["lconstraint"])
+    if lconstraint != 2 or not volume_map.plasma_region:
+        raise ValueError("evaluate_spectre_helicity_constraint only applies to plasma Lconstraint=2")
+    target = _fortran_1_index(summary.constraints["helicity"], lvol, name="helicity")
+    derivative_solution = solve.derivative_solutions[0]
+    jacobian_value = 0.5 * (
+        derivative_solution @ (d_md @ solve.solution)
+        + solve.solution @ (d_md @ derivative_solution)
+    )
+    return SpectreLocalConstraintEvaluation(
+        lvol=lvol,
+        lconstraint=lconstraint,
+        unknown_count=1,
+        residual=jnp.asarray([solve.magnetic_helicity_integral - target], dtype=jnp.float64),
+        jacobian=jnp.asarray([[jacobian_value]], dtype=jnp.float64),
+        magnetic_energy_integral=solve.magnetic_energy_integral,
+        magnetic_helicity_integral=solve.magnetic_helicity_integral,
+    )

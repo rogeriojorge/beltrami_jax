@@ -74,7 +74,7 @@ The package currently provides:
 - `load_packaged_spectre_linear_system`
   - loads packaged released-SPECTRE matrix/RHS/solution fixtures for linear-solve parity tests
 - `solve_spectre_assembled_numpy`
-  - provides the minimal NumPy-returning SPECTRE adapter for already assembled Beltrami matrices
+  - provides the minimal NumPy-returning SPECTRE adapter for already assembled Beltrami matrices, including derivative solves and energy/helicity integrals
 - `solve_spectre_beltrami_branch`
   - ports SPECTRE's local branch solve, including derivative right-hand sides used by constraint Jacobians
 - `evaluate_spectre_constraints`
@@ -88,9 +88,13 @@ The package currently provides:
 - `assemble_spectre_volume_matrices_from_input`
   - assembles `dMA`, `dMD`, `dMB`, and `dMG` for one SPECTRE volume directly from TOML/interface geometry when the branch is supported
 - `solve_spectre_volume_from_input`
-  - assembles one SPECTRE volume, solves it, and unpacks directly to `Ate/Aze/Ato/Azo`
+  - assembles one SPECTRE volume, solves it, unpacks directly to `Ate/Aze/Ato/Azo`, and exposes derivative vector-potential blocks
 - `solve_spectre_volumes_from_input`, `solve_spectre_toml`
   - solve selected or all packed SPECTRE volumes from TOML/interface geometry and concatenate a full `Ate/Aze/Ato/Azo` coefficient block
+- `compute_spectre_plasma_current`
+  - evaluates SPECTRE-style toroidal and poloidal current diagnostics from solved coefficient blocks
+- `evaluate_spectre_helicity_constraint`, `evaluate_spectre_local_constraints`
+  - evaluate local SPECTRE constraint residuals/Jacobians from TOML targets and JAX diagnostics
 - `save_problem_json`, `load_problem_json`, `save_nonlinear_solution`
   - handle user-facing input and output files for standalone workflows
 
@@ -133,11 +137,11 @@ The example scripts print progress and diagnostics. This is intentional. The goa
 
 ## Current limitations
 
-This package now performs prototype internal geometry assembly, Krylov solves, and a helicity-constrained outer loop, but it still does not cover:
+This package now performs prototype internal geometry assembly, Krylov solves, a helicity-constrained outer loop, SPECTRE matrix assembly, SPECTRE current diagnostics, and selected local SPECTRE constraint updates, but it still does not cover:
 
 - every SPEC/SPECTRE branch and auxiliary matrix path
-- SPECTRE transform/current diagnostics from solved JAX fields
-- the outer nonlinear SPECTRE constraint loop that updates `mu` and fluxes without injected SPECTRE metadata
+- SPECTRE rotational-transform diagnostics from solved JAX fields
+- the global/semi-global SPECTRE constraint loop that updates `mu` and fluxes without injected SPECTRE metadata
 - broader non-stellarator-symmetric and high-resolution fixture coverage
 - full sparse production scaling
 - the broader equilibrium and constraint machinery beyond the supported Beltrami workflow

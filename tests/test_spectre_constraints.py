@@ -4,15 +4,23 @@ import numpy as np
 import pytest
 
 from beltrami_jax import (
+    SpectreInputSummary,
     SpectreConstraintDiagnostics,
     SpectreConstraintTargets,
+    SpectrePlasmaCurrentDiagnostic,
+    SpectreRotationalTransformDiagnostic,
+    build_spectre_dof_layout,
+    evaluate_spectre_local_constraints,
     evaluate_spectre_constraints,
+    evaluate_spectre_helicity_constraint,
     load_all_packaged_spectre_linear_systems,
     load_packaged_spectre_linear_system,
+    solve_spectre_assembled,
     solve_spectre_beltrami_branch,
     solve_spectre_beltrami_branch_numpy,
     spectre_branch_unknowns,
     spectre_constraint_dof_count,
+    spectre_local_unknown_count,
 )
 
 
@@ -217,3 +225,134 @@ def test_evaluate_spectre_constraints_zero_and_missing_diagnostics() -> None:
 
     with pytest.raises(ValueError, match="unsupported"):
         spectre_constraint_dof_count(lconstraint=99, is_vacuum=False)
+
+
+def _summary_for_local_constraints(*, lconstraint: int, nvol: int = 2, free_boundary: bool = False) -> SpectreInputSummary:
+    packed = nvol + 1 if free_boundary else nvol
+    return SpectreInputSummary(
+        source="synthetic_local_constraints",
+        physics={
+            "igeometry": 2,
+            "nfp": 1,
+            "nvol": nvol,
+            "mpol": 0,
+            "ntor": 0,
+            "lrad": [1] * packed,
+            "lfreebound": free_boundary,
+            "tflux": np.linspace(0.5, 1.0, packed).tolist(),
+            "pflux": np.linspace(0.1, 0.2, packed).tolist(),
+            "mu": [0.0] * nvol,
+            "iota": [0.7, 0.8, 0.9, 1.0][: packed + 1],
+            "oita": [0.65, 0.75, 0.85, 0.95][: packed + 1],
+            "helicity": [0.2] * packed,
+            "curtor": 6.5,
+            "curpol": 10.0,
+            "lconstraint": lconstraint,
+        },
+        numeric={},
+        global_options={},
+        local={},
+        diagnostics={},
+        rbc={},
+        zbs={},
+        rbs={},
+        zbc={},
+    )
+
+
+def _dummy_backend_solve():
+    return solve_spectre_assembled(
+        d_ma=np.eye(2),
+        d_md=0.25 * np.eye(2),
+        d_mb=np.eye(2),
+        mu=0.1,
+        psi=np.asarray([1.0, -0.5]),
+    )
+
+
+def test_evaluate_spectre_local_constraint_branches_from_toml_targets() -> None:
+    current = SpectrePlasmaCurrentDiagnostic(
+        lvol=1,
+        innout=0,
+        currents=np.asarray([7.0, 11.0]),
+        derivative_currents=np.asarray([[0.1, 0.2], [0.3, 0.4]]),
+    )
+    transform = SpectreRotationalTransformDiagnostic(
+        iota=np.asarray([0.9, 1.1]),
+        derivative_iota=np.asarray([[0.5, 0.6], [0.7, 0.8]]),
+    )
+    solve = _dummy_backend_solve()
+
+    current_summary = _summary_for_local_constraints(lconstraint=-2, nvol=1)
+    axis_map = build_spectre_dof_layout(current_summary).volume_maps[0]
+    axis_eval = evaluate_spectre_local_constraints(
+        current_summary,
+        lvol=1,
+        volume_map=axis_map,
+        solve=solve,
+        currents=current,
+    )
+    np.testing.assert_allclose(np.asarray(axis_eval.residual), np.asarray([1.0]))
+    np.testing.assert_allclose(np.asarray(axis_eval.jacobian), np.asarray([[0.3]]))
+    assert spectre_local_unknown_count(current_summary, axis_map) == 1
+
+    vacuum_summary = _summary_for_local_constraints(lconstraint=0, nvol=1, free_boundary=True)
+    vacuum_map = build_spectre_dof_layout(vacuum_summary).volume_maps[1]
+    vacuum_eval = evaluate_spectre_local_constraints(
+        vacuum_summary,
+        lvol=2,
+        volume_map=vacuum_map,
+        solve=solve,
+        currents=current,
+    )
+    np.testing.assert_allclose(np.asarray(vacuum_eval.residual), np.asarray([0.5, 1.0]))
+    np.testing.assert_allclose(np.asarray(vacuum_eval.jacobian), np.asarray([[0.1, 0.2], [0.3, 0.4]]))
+
+    iota_summary = _summary_for_local_constraints(lconstraint=1, nvol=2)
+    bulk_map = build_spectre_dof_layout(iota_summary).volume_maps[1]
+    iota_eval = evaluate_spectre_local_constraints(
+        iota_summary,
+        lvol=2,
+        volume_map=bulk_map,
+        solve=solve,
+        transform=transform,
+    )
+    np.testing.assert_allclose(np.asarray(iota_eval.residual), np.asarray([0.25, 0.3]))
+    np.testing.assert_allclose(np.asarray(iota_eval.jacobian), np.asarray([[0.5, 0.6], [0.7, 0.8]]))
+
+    vacuum_iota_summary = _summary_for_local_constraints(lconstraint=1, nvol=1, free_boundary=True)
+    vacuum_iota_map = build_spectre_dof_layout(vacuum_iota_summary).volume_maps[1]
+    vacuum_iota_eval = evaluate_spectre_local_constraints(
+        vacuum_iota_summary,
+        lvol=2,
+        volume_map=vacuum_iota_map,
+        solve=solve,
+        transform=transform,
+        currents=current,
+    )
+    np.testing.assert_allclose(np.asarray(vacuum_iota_eval.residual), np.asarray([0.25, 1.0]))
+    np.testing.assert_allclose(np.asarray(vacuum_iota_eval.jacobian), np.asarray([[0.5, 0.6], [0.3, 0.4]]))
+
+
+def test_evaluate_spectre_helicity_constraint_from_backend_integral() -> None:
+    summary = _summary_for_local_constraints(lconstraint=2, nvol=1)
+    volume_map = build_spectre_dof_layout(summary).volume_maps[0]
+    solve = _dummy_backend_solve()
+    evaluation = evaluate_spectre_helicity_constraint(
+        summary,
+        lvol=1,
+        volume_map=volume_map,
+        solve=solve,
+        d_md=0.25 * np.eye(2),
+    )
+    assert evaluation.unknown_count == 1
+    assert evaluation.jacobian.shape == (1, 1)
+
+    with pytest.raises(ValueError, match="plasma Lconstraint=2"):
+        evaluate_spectre_helicity_constraint(
+            _summary_for_local_constraints(lconstraint=3, nvol=1),
+            lvol=1,
+            volume_map=volume_map,
+            solve=solve,
+            d_md=0.25 * np.eye(2),
+        )

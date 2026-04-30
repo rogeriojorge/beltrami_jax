@@ -43,10 +43,38 @@ def test_spectre_backend_numpy_wrapper_is_adapter_friendly() -> None:
     result = solve_spectre_assembled_numpy(**_backend_kwargs(fixture))
 
     assert isinstance(result["solution"], np.ndarray)
+    assert isinstance(result["derivative_solutions"], np.ndarray)
     assert isinstance(result["residual"], np.ndarray)
+    assert isinstance(result["derivative_residuals"], np.ndarray)
     assert isinstance(result["residual_norm"], float)
     assert isinstance(result["relative_residual_norm"], float)
+    assert isinstance(result["magnetic_energy_integral"], float)
+    assert isinstance(result["magnetic_helicity_integral"], float)
     np.testing.assert_allclose(result["solution"], np.asarray(fixture.expected_solution), rtol=3e-12, atol=3e-12)
+
+
+def test_spectre_backend_returns_derivative_solves_and_integrals() -> None:
+    fixture = load_packaged_spectre_linear_system("G2V32L1Fi/lvol2")
+    result = solve_spectre_assembled(**_backend_kwargs(fixture))
+
+    assert result.derivative_solutions.shape == (2, fixture.n_dof)
+    assert result.derivative_residuals.shape == (2, fixture.n_dof)
+    assert np.max(np.asarray(result.derivative_relative_residual_norms)) < RESIDUAL_TOLERANCE
+    assert np.isfinite(float(result.magnetic_energy_integral))
+    assert np.isfinite(float(result.magnetic_helicity_integral))
+
+    np.testing.assert_allclose(
+        np.asarray(fixture.matrix @ result.derivative_solutions[0]),
+        np.asarray(fixture.system.d_md @ result.solution),
+        rtol=4e-12,
+        atol=4e-12,
+    )
+    np.testing.assert_allclose(
+        np.asarray(fixture.matrix @ result.derivative_solutions[1]),
+        -np.asarray(fixture.system.d_mb[:, 1]),
+        rtol=4e-12,
+        atol=4e-12,
+    )
 
 
 def test_spectre_backend_batches_equal_size_plasma_volumes() -> None:
@@ -70,6 +98,8 @@ def test_spectre_backend_batches_equal_size_plasma_volumes() -> None:
         relative_error = np.linalg.norm(np.asarray(result.solutions[row]) - expected) / max(np.linalg.norm(expected), 1e-300)
         assert relative_error < 3e-12
     assert np.max(np.asarray(result.relative_residual_norms)) < RESIDUAL_TOLERANCE
+    assert result.derivative_solutions.shape == (len(fixtures), 2, fixtures[0].n_dof)
+    assert np.max(np.asarray(result.derivative_relative_residual_norms)) < RESIDUAL_TOLERANCE
 
 
 def test_spectre_backend_supports_no_dmg_plasma_default() -> None:

@@ -1,0 +1,33 @@
+{
+  "generated": "2026-04-30",
+  "spectre_rebuild": "python -m pip install -e . succeeded in /Users/rogerio/local/spectre",
+  "injection": {
+    "case": "G3V3L3Fi",
+    "max_relative_residual": 8.240902103055836e-13,
+    "injection_relative_error": 0.0,
+    "shape": [
+      19,
+      23
+    ]
+  },
+  "force_backend_switch": [
+    {
+      "case": "G3V3L2Fi_stability",
+      "branch": "local helicity, Lconstraint=2",
+      "relative_force_error": 1.2510234941523128e-12,
+      "status": "validated branch"
+    },
+    {
+      "case": "G3V3L3Fi",
+      "branch": "semi-global flux, Lconstraint=3",
+      "relative_force_error": 0.0016675304372497828,
+      "status": "expected gap: global/semi-global update not ported"
+    },
+    {
+      "case": "G2V32L1Fi",
+      "branch": "rotational transform, Lconstraint=1",
+      "relative_force_error": 0.024055140334128033,
+      "status": "expected gap: rotational-transform diagnostic not ported"
+    }
+  ]
+}

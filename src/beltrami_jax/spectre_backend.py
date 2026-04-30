@@ -16,9 +16,15 @@ class SpectreBackendSolve:
     """Minimal SPECTRE-facing Beltrami solve result."""
 
     solution: Array
+    derivative_solutions: Array
     residual: Array
+    derivative_residuals: Array
     residual_norm: Array
     relative_residual_norm: Array
+    derivative_residual_norms: Array
+    derivative_relative_residual_norms: Array
+    magnetic_energy_integral: Array
+    magnetic_helicity_integral: Array
 
 
 @dataclass(frozen=True)
@@ -26,9 +32,15 @@ class SpectreBackendBatchSolve:
     """Batched SPECTRE-facing Beltrami solve result for equal-size systems."""
 
     solutions: Array
+    derivative_solutions: Array
     residuals: Array
+    derivative_residuals: Array
     residual_norms: Array
     relative_residual_norms: Array
+    derivative_residual_norms: Array
+    derivative_relative_residual_norms: Array
+    magnetic_energy_integrals: Array
+    magnetic_helicity_integrals: Array
 
 
 @dataclass(frozen=True)
@@ -55,7 +67,7 @@ def _solve_spectre_assembled_jax(
     *,
     is_vacuum: bool,
     include_d_mg_in_rhs: bool,
-) -> tuple[Array, Array, Array, Array]:
+) -> tuple[Array, Array, Array, Array, Array, Array, Array, Array, Array, Array]:
     operator = d_ma if is_vacuum else d_ma - mu * d_md
     rhs = -(d_mb @ psi)
     if include_d_mg_in_rhs:
@@ -64,7 +76,32 @@ def _solve_spectre_assembled_jax(
     residual = operator @ solution - rhs
     residual_norm = jnp.linalg.norm(residual, ord=2)
     rhs_norm = jnp.maximum(jnp.linalg.norm(rhs, ord=2), jnp.asarray(1.0e-30, dtype=rhs.dtype))
-    return solution, residual, residual_norm, residual_norm / rhs_norm
+
+    first_derivative_rhs = jnp.where(
+        is_vacuum,
+        -d_mb[:, 0],
+        jnp.where(include_d_mg_in_rhs, -d_mb[:, 0], d_md @ solution),
+    )
+    second_derivative_rhs = -d_mb[:, 1]
+    derivative_rhs = jnp.stack((first_derivative_rhs, second_derivative_rhs), axis=1)
+    derivative_solutions = jnp.linalg.solve(operator, derivative_rhs).T
+    derivative_residuals = (operator @ derivative_solutions.T - derivative_rhs).T
+    derivative_residual_norms = jnp.linalg.norm(derivative_residuals, ord=2, axis=1)
+    derivative_rhs_norms = jnp.maximum(jnp.linalg.norm(derivative_rhs.T, ord=2, axis=1), jnp.asarray(1.0e-30, dtype=rhs.dtype))
+    magnetic_energy_integral = 0.5 * (solution @ (d_ma @ solution)) + solution @ (d_mb @ psi)
+    magnetic_helicity_integral = 0.5 * (solution @ (d_md @ solution))
+    return (
+        solution,
+        derivative_solutions,
+        residual,
+        derivative_residuals,
+        residual_norm,
+        residual_norm / rhs_norm,
+        derivative_residual_norms,
+        derivative_residual_norms / derivative_rhs_norms,
+        magnetic_energy_integral,
+        magnetic_helicity_integral,
+    )
 
 
 @partial(jax.jit, static_argnames=("is_vacuum", "include_d_mg_in_rhs"))
@@ -78,7 +115,7 @@ def _solve_spectre_assembled_batch_jax(
     *,
     is_vacuum: bool,
     include_d_mg_in_rhs: bool,
-) -> tuple[Array, Array, Array, Array]:
+) -> tuple[Array, Array, Array, Array, Array, Array, Array, Array, Array, Array]:
     operators = d_ma if is_vacuum else d_ma - mu[:, None, None] * d_md
     rhs = -jnp.einsum("bij,bj->bi", d_mb, psi)
     if include_d_mg_in_rhs:
@@ -87,7 +124,46 @@ def _solve_spectre_assembled_batch_jax(
     residuals = jnp.einsum("bij,bj->bi", operators, solutions) - rhs
     residual_norms = jnp.linalg.norm(residuals, ord=2, axis=1)
     rhs_norms = jnp.maximum(jnp.linalg.norm(rhs, ord=2, axis=1), jnp.asarray(1.0e-30, dtype=rhs.dtype))
-    return solutions, residuals, residual_norms, residual_norms / rhs_norms
+    first_derivative_rhs = jnp.where(
+        is_vacuum,
+        -d_mb[:, :, 0],
+        jnp.where(
+            include_d_mg_in_rhs,
+            -d_mb[:, :, 0],
+            jnp.einsum("bij,bj->bi", d_md, solutions),
+        ),
+    )
+    second_derivative_rhs = -d_mb[:, :, 1]
+    derivative_rhs = jnp.stack((first_derivative_rhs, second_derivative_rhs), axis=1)
+    derivative_solutions = jax.vmap(lambda operator, local_rhs: jnp.linalg.solve(operator, local_rhs.T).T)(
+        operators,
+        derivative_rhs,
+    )
+    derivative_residuals = jnp.einsum("bij,bkj->bki", operators, derivative_solutions) - derivative_rhs
+    derivative_residual_norms = jnp.linalg.norm(derivative_residuals, ord=2, axis=2)
+    derivative_rhs_norms = jnp.maximum(
+        jnp.linalg.norm(derivative_rhs, ord=2, axis=2),
+        jnp.asarray(1.0e-30, dtype=rhs.dtype),
+    )
+    magnetic_energy_integrals = 0.5 * jnp.einsum("bi,bij,bj->b", solutions, d_ma, solutions) + jnp.einsum(
+        "bi,bij,bj->b",
+        solutions,
+        d_mb,
+        psi,
+    )
+    magnetic_helicity_integrals = 0.5 * jnp.einsum("bi,bij,bj->b", solutions, d_md, solutions)
+    return (
+        solutions,
+        derivative_solutions,
+        residuals,
+        derivative_residuals,
+        residual_norms,
+        residual_norms / rhs_norms,
+        derivative_residual_norms,
+        derivative_residual_norms / derivative_rhs_norms,
+        magnetic_energy_integrals,
+        magnetic_helicity_integrals,
+    )
 
 
 def _as_vector_d_mg(
@@ -144,7 +220,18 @@ def solve_spectre_assembled(
         size=int(d_ma_j.shape[0]),
         include_d_mg_in_rhs=include_d_mg_in_rhs,
     )
-    solution, residual, residual_norm, relative_residual_norm = _solve_spectre_assembled_jax(
+    (
+        solution,
+        derivative_solutions,
+        residual,
+        derivative_residuals,
+        residual_norm,
+        relative_residual_norm,
+        derivative_residual_norms,
+        derivative_relative_residual_norms,
+        magnetic_energy_integral,
+        magnetic_helicity_integral,
+    ) = _solve_spectre_assembled_jax(
         d_ma_j,
         d_md_j,
         d_mb_j,
@@ -156,9 +243,15 @@ def solve_spectre_assembled(
     )
     return SpectreBackendSolve(
         solution=solution,
+        derivative_solutions=derivative_solutions,
         residual=residual,
+        derivative_residuals=derivative_residuals,
         residual_norm=residual_norm,
         relative_residual_norm=relative_residual_norm,
+        derivative_residual_norms=derivative_residual_norms,
+        derivative_relative_residual_norms=derivative_relative_residual_norms,
+        magnetic_energy_integral=magnetic_energy_integral,
+        magnetic_helicity_integral=magnetic_helicity_integral,
     )
 
 
@@ -171,9 +264,15 @@ def solve_spectre_assembled_numpy(
     residual = np.asarray(result.residual)
     return {
         "solution": solution,
+        "derivative_solutions": np.asarray(result.derivative_solutions),
         "residual": residual,
+        "derivative_residuals": np.asarray(result.derivative_residuals),
         "residual_norm": float(np.asarray(result.residual_norm)),
         "relative_residual_norm": float(np.asarray(result.relative_residual_norm)),
+        "derivative_residual_norms": np.asarray(result.derivative_residual_norms),
+        "derivative_relative_residual_norms": np.asarray(result.derivative_relative_residual_norms),
+        "magnetic_energy_integral": float(np.asarray(result.magnetic_energy_integral)),
+        "magnetic_helicity_integral": float(np.asarray(result.magnetic_helicity_integral)),
     }
 
 
@@ -206,7 +305,18 @@ def solve_spectre_assembled_batch(
         size=size,
         include_d_mg_in_rhs=include_d_mg_in_rhs,
     )
-    solutions, residuals, residual_norms, relative_residual_norms = _solve_spectre_assembled_batch_jax(
+    (
+        solutions,
+        derivative_solutions,
+        residuals,
+        derivative_residuals,
+        residual_norms,
+        relative_residual_norms,
+        derivative_residual_norms,
+        derivative_relative_residual_norms,
+        magnetic_energy_integrals,
+        magnetic_helicity_integrals,
+    ) = _solve_spectre_assembled_batch_jax(
         d_ma_j,
         d_md_j,
         d_mb_j,
@@ -218,9 +328,15 @@ def solve_spectre_assembled_batch(
     )
     return SpectreBackendBatchSolve(
         solutions=solutions,
+        derivative_solutions=derivative_solutions,
         residuals=residuals,
+        derivative_residuals=derivative_residuals,
         residual_norms=residual_norms,
         relative_residual_norms=relative_residual_norms,
+        derivative_residual_norms=derivative_residual_norms,
+        derivative_relative_residual_norms=derivative_relative_residual_norms,
+        magnetic_energy_integrals=magnetic_energy_integrals,
+        magnetic_helicity_integrals=magnetic_helicity_integrals,
     )
 
 

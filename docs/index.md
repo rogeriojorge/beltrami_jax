@@ -42,8 +42,10 @@ The repository currently covers the supported Beltrami workflow components:
 - SPECTRE TOML input summaries
 - SPECTRE HDF5 vector-potential coefficient loading and comparison
 - SPECTRE solution-vector pack/unpack maps and packaged linear-system parity fixtures
+- SPECTRE TOML/interface-geometry matrix assembly for the packaged validated branches
+- SPECTRE-shaped `Ate/Aze/Ato/Azo` solves, derivative vector-potential blocks, current diagnostics, and selected local constraint updates
 
-It does not yet include all of SPEC or a full JAX-native SPECTRE Beltrami backend.
+It does not yet include all of SPEC or a full JAX-native SPECTRE Beltrami backend because rotational-transform diagnostics and global/semi-global constraint updates remain open.
 
 ## Quick links
 

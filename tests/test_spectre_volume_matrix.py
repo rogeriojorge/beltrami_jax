@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from beltrami_jax import (
     SpectreInputSummary,
@@ -11,11 +12,14 @@ from beltrami_jax import (
     build_spectre_dof_layout,
     build_spectre_interface_geometry,
     chebyshev_basis,
+    compute_spectre_plasma_current,
     load_packaged_spectre_case,
     load_packaged_spectre_linear_system,
     solve_spectre_assembled,
+    solve_spectre_toml,
     solve_spectre_volumes_from_input,
     solve_spectre_volume_from_input,
+    spectre_normalized_fluxes,
     spectre_volume_flux_vector,
     zernike_axis_basis,
 )
@@ -231,6 +235,109 @@ def test_solve_spectre_volume_from_input_produces_vector_potential_coefficients(
             atol=5e-11,
         )
     assert float(result.relative_residual_norm) < 1.0e-12
+    assert len(result.derivative_vector_potentials) == 2
+    assert result.constraint is None
+
+
+def test_spectre_plasma_current_diagnostic_uses_solution_derivatives() -> None:
+    case = load_packaged_spectre_case("G3V3L3Fi")
+    lvol = 2
+    fixture = load_packaged_spectre_linear_system(case_label=case.label, volume_index=lvol)
+    result = solve_spectre_volume_from_input(
+        case.input_summary,
+        lvol=lvol,
+        mu=fixture.system.mu,
+        psi=fixture.system.psi,
+    )
+
+    currents = compute_spectre_plasma_current(
+        case.input_summary,
+        lvol=lvol,
+        vector_potential=result.vector_potential,
+        derivative_vector_potentials=result.derivative_vector_potentials,
+    )
+
+    np.testing.assert_allclose(np.asarray(currents.currents), np.asarray([-3.34899608e-05, 2.13891175e01]), rtol=2e-9)
+    np.testing.assert_allclose(
+        np.asarray(currents.derivative_currents),
+        np.asarray([[-0.12509176, 1.00983483], [0.03711546, -0.30117631]]),
+        rtol=2e-8,
+        atol=2e-8,
+    )
+
+    radial_currents = compute_spectre_plasma_current(
+        case.input_summary,
+        lvol=lvol,
+        vector_potential=result.vector_potential,
+        derivative_vector_potentials=result.derivative_vector_potentials,
+        include_radial_field=True,
+    )
+    assert radial_currents.derivative_currents.shape == (2, 2)
+    assert np.all(np.isfinite(np.asarray(radial_currents.currents)))
+
+    with pytest.raises(ValueError, match="outside"):
+        compute_spectre_plasma_current(case.input_summary, lvol=99, vector_potential=result.vector_potential)
+
+
+def test_spectre_lconstraint2_local_helicity_solve_is_satisfied_at_reference_state() -> None:
+    case = load_packaged_spectre_case("G3V3L2Fi_stability")
+    lvol = 2
+    fixture = load_packaged_spectre_linear_system(case_label=case.label, volume_index=lvol)
+
+    result = solve_spectre_volume_from_input(
+        case.input_summary,
+        lvol=lvol,
+        mu=fixture.system.mu,
+        psi=fixture.system.psi,
+        solve_local_constraints=True,
+    )
+
+    assert result.constraint is not None
+    assert result.constraint.unknown_count == 1
+    assert float(result.constraint.residual_norm) < 1.0e-12
+    np.testing.assert_allclose(float(result.mu), float(fixture.system.mu), rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(np.asarray(result.solution), np.asarray(fixture.expected_solution), rtol=3e-12, atol=5e-11)
+
+
+def test_spectre_zero_unknown_local_constraint_solve_returns_constraint_record() -> None:
+    case = load_packaged_spectre_case("G3V3L3Fi")
+    lvol = 2
+    fixture = load_packaged_spectre_linear_system(case_label=case.label, volume_index=lvol)
+
+    result = solve_spectre_volume_from_input(
+        case.input_summary,
+        lvol=lvol,
+        mu=fixture.system.mu,
+        psi=fixture.system.psi,
+        solve_local_constraints=True,
+    )
+
+    assert result.constraint is not None
+    assert result.constraint.unknown_count == 0
+    assert float(result.constraint.residual_norm) == 0.0
+    np.testing.assert_allclose(np.asarray(result.solution), np.asarray(fixture.expected_solution), rtol=3e-12, atol=5e-11)
+
+
+def test_spectre_local_constraint_solve_rejects_open_rotational_transform_branch() -> None:
+    case = load_packaged_spectre_case("G2V32L1Fi")
+    with pytest.raises(NotImplementedError, match="Lconstraint=2 helicity"):
+        solve_spectre_volume_from_input(
+            case.input_summary,
+            lvol=2,
+            solve_local_constraints=True,
+            max_constraint_iterations=1,
+        )
+
+
+def test_spectre_local_constraint_solve_validates_iteration_count() -> None:
+    case = load_packaged_spectre_case("G3V3L2Fi_stability")
+    with pytest.raises(ValueError, match="max_constraint_iterations"):
+        solve_spectre_volume_from_input(
+            case.input_summary,
+            lvol=2,
+            solve_local_constraints=True,
+            max_constraint_iterations=0,
+        )
 
 
 def test_toml_assembled_volume_matrices_solve_and_unpack_reference_coefficients() -> None:
@@ -271,6 +378,9 @@ def test_toml_multi_volume_solve_returns_full_vector_potential_block() -> None:
     assert len(result.volume_solves) == case.input_summary.packed_volume_count
     assert result.vector_potential.shape == case.reference.vector_potential.shape
     assert float(result.max_relative_residual_norm) < 2.0e-12
+    assert result.residual_norms.shape == (case.input_summary.packed_volume_count,)
+    assert result.relative_residual_norms.shape == (case.input_summary.packed_volume_count,)
+    assert set(result.component_norms()) == {"ate", "aze", "ato", "azo"}
     for name in ("ate", "aze", "ato", "azo"):
         np.testing.assert_allclose(
             getattr(result.vector_potential, name),
@@ -278,3 +388,75 @@ def test_toml_multi_volume_solve_returns_full_vector_potential_block() -> None:
             rtol=3e-12,
             atol=8e-11,
         )
+
+
+def test_spectre_solve_helpers_cover_empty_and_invalid_volume_selections() -> None:
+    case = load_packaged_spectre_case("G3V3L3Fi")
+
+    empty = solve_spectre_volumes_from_input(case.input_summary, volumes=())
+    assert empty.vector_potential.shape == (0, 0)
+    assert float(empty.max_relative_residual_norm) == 0.0
+
+    empty_from_toml = solve_spectre_toml(case.input_summary.source, volumes=())
+    assert empty_from_toml.vector_potential.shape == (0, 0)
+
+    with pytest.raises(ValueError, match="volumes"):
+        solve_spectre_volumes_from_input(case.input_summary, volumes=(99,))
+    with pytest.raises(ValueError, match="outside"):
+        solve_spectre_volume_from_input(case.input_summary, lvol=99)
+    with pytest.raises(ValueError, match="outside"):
+        spectre_volume_flux_vector(case.input_summary, lvol=99)
+
+
+def test_spectre_flux_helpers_validate_bad_summary_data() -> None:
+    bad_lengths = SpectreInputSummary(
+        source="bad_lengths",
+        physics={
+            "igeometry": 1,
+            "nfp": 1,
+            "nvol": 2,
+            "mpol": 0,
+            "ntor": 0,
+            "lrad": [1, 1],
+            "tflux": [1.0],
+            "pflux": [0.0, 0.0],
+            "mu": [0.0, 0.0],
+            "helicity": [0.0, 0.0],
+        },
+        numeric={},
+        global_options={},
+        local={},
+        diagnostics={},
+        rbc={},
+        zbs={},
+        rbs={},
+        zbc={},
+    )
+    with pytest.raises(ValueError, match="tflux and pflux"):
+        spectre_normalized_fluxes(bad_lengths)
+
+    zero_reference = SpectreInputSummary(
+        source="zero_reference",
+        physics={
+            "igeometry": 1,
+            "nfp": 1,
+            "nvol": 2,
+            "mpol": 0,
+            "ntor": 0,
+            "lrad": [1, 1],
+            "tflux": [1.0, 0.0],
+            "pflux": [0.0, 0.0],
+            "mu": [0.0, 0.0],
+            "helicity": [0.0, 0.0],
+        },
+        numeric={},
+        global_options={},
+        local={},
+        diagnostics={},
+        rbc={},
+        zbs={},
+        rbs={},
+        zbc={},
+    )
+    with pytest.raises(ValueError, match="nonzero"):
+        spectre_normalized_fluxes(zero_reference)

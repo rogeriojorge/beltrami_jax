@@ -164,6 +164,7 @@ The test suite verifies:
 - Omitting `--use-packaged` compares against a local SPECTRE checkout and local fresh exports when those are present.
 - `solve_spectre_assembled_numpy` is tested as the thin adapter that SPECTRE can call once it has already assembled one Beltrami linear system.
 - `solve_spectre_assembled_batch` is tested on equal-size SPECTRE plasma volumes so repeated same-shape solves have a vectorized path.
+- Backend derivative solves, derivative residuals, and energy/helicity integral outputs are tested against SPECTRE branch formulas.
 - `build_spectre_interface_geometry` parses SPECTRE `allrzrz` interface rows and free-boundary wall rows from TOML input into internal Fourier mode order.
 - `interpolate_spectre_volume_geometry` is tested for coordinate-singularity and non-axis interpolation consistency.
 - `evaluate_spectre_volume_coordinates` is tested for finite Jacobian/metric values, metric symmetry, and JAX autodiff through the radial interpolation coordinate.
@@ -173,6 +174,8 @@ The test suite verifies:
 - `assemble_spectre_matrix_ad_from_input` reproduces SPECTRE `dMA/dMD` for validated cylindrical coordinate-singularity/bulk volumes, toroidal generated-interface volumes, explicit-interface free-boundary volumes, and the free-boundary vacuum volume.
 - `build_spectre_interface_geometry` includes SPECTRE-compatible centroid `rzaxis` handling for the covered toroidal coordinate-axis cases.
 - `solve_spectre_volume_from_input` is tested in a TOML-driven solve/unpack path that returns the same SPECTRE vector-potential block when supplied the same post-constraint branch `mu` and flux vector used by SPECTRE.
+- `compute_spectre_plasma_current` is tested on a solved SPECTRE coefficient block, including derivatives with respect to the two branch derivative solves.
+- `solve_spectre_volume_from_input(..., solve_local_constraints=True)` is tested on the `G3V3L2Fi_stability` plasma helicity branch and satisfies the local `Lconstraint=2` residual at the SPECTRE reference state.
 - `solve_spectre_volumes_from_input` is tested in a full TOML-to-`Ate/Aze/Ato/Azo` path that reconstructs all packed `G3V3L3Fi` coefficients with global relative error `1.69e-14` when supplied the same post-constraint branch state used by SPECTRE.
 
 Current public SPECTRE compare-case results:
@@ -231,6 +234,16 @@ Current released-SPECTRE linear parity:
 - `matrixBG` updated-normal-field `dMB/dMG` parity: exact for all 19 packaged released-SPECTRE fixtures
 - JAX-native `dMA/dMD` parity: roundoff-level agreement for all packaged cylindrical, toroidal fixed-boundary, explicit-interface free-boundary, and vacuum volumes
 - TOML-driven assembled solve/unpack parity: validated volume solves reproduce packaged SPECTRE solution vectors and `Ate/Aze/Ato/Azo` coefficient blocks when supplied SPECTRE's solved `mu` and flux vector
+- JAX-native current diagnostic smoke/parity anchor: validated finite toroidal/poloidal current values and derivative-current rows for a packaged toroidal solve
+- local `Lconstraint=2` helicity residual at SPECTRE reference state: below `1e-12`
+- local SPECTRE runtime injection seam: coefficient injection relative copy error `0.0`
+- opt-in `force_real(..., beltrami_backend="jax")` path: relative force error `1.25e-12` on `G3V3L2Fi_stability`
+
+Expected non-roundoff force errors remain on `G3V3L3Fi` (`Lconstraint=3`) and
+`G2V32L1Fi` (`Lconstraint=1`) because the global/semi-global flux update and
+rotational-transform diagnostic are still open.
+
+![SPECTRE backend seam runtime validation](_static/spectre_backend_seam_runtime.png)
 
 Programmatic access:
 
@@ -274,7 +287,9 @@ Remaining validation work includes:
 
 - comparisons against later SPECTRE integration points beyond exported matrix/RHS/solution fixtures
 - final-state SPECTRE HDF5 vector-potential coefficient generation without injecting post-constraint SPECTRE `mu`/flux values
-- JAX-native transform/current diagnostics from solved fields rather than injected diagnostic arrays
+- JAX-native rotational-transform diagnostics from solved fields rather than injected diagnostic arrays
+- dedicated SPECTRE dumps of `dItGpdxtp` values for stronger current-diagnostic parity
+- SPECTRE global/semi-global `Lconstraint=3` force-coupled update parity
 - broader 3D fixture coverage closer to anticipated SPECTRE use cases
 - end-to-end SPECTRE fork integration once diagnostics and nonlinear updates are complete
 

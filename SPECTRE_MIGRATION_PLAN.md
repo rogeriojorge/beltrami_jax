@@ -1074,3 +1074,124 @@ Best next implementation order:
 3. Port or approximate-scope `magnetic_field_mod.F90::compute_rotational_transform`, beginning with the released `Lsparse`/`Lsvdiota` branch used by public tests.
 4. Add a local Newton loop that wraps `solve_spectre_beltrami_branch`, diagnostics, and `evaluate_spectre_constraints`.
 5. Only then modify the SPECTRE fork to call the JAX backend without SPEC/Fortran Beltrami assembly.
+
+## 17. 2026-04-30 Progress: Current Diagnostics, Local Constraint Hook, and SPECTRE Injection Seam
+
+New completed ingredients in `beltrami_jax`:
+
+- Extended `src/beltrami_jax/spectre_backend.py`.
+  - The assembled SPECTRE backend now returns the two branch derivative solves, derivative residuals, magnetic-energy integral, and magnetic-helicity integral in addition to the primary solution.
+  - The NumPy adapter returns the same data for a future SPECTRE-side call.
+  - The equal-size batch path returns derivative solves and integrals for batched validation/performance tests.
+- Added `src/beltrami_jax/spectre_diagnostics.py`.
+  - Ports the algebraic SPECTRE plasma-current diagnostic path from solved `Ate/Aze/Ato/Azo` coefficients.
+  - Returns toroidal/poloidal current values and derivative currents from the derivative vector-potential solves.
+  - Supports the `Lconstraint=-2` outer-face branch with optional radial field inclusion.
+- Extended `src/beltrami_jax/spectre_constraints.py`.
+  - Preserves the existing branch-solve API and adds TOML/state-aware local constraint helpers.
+  - Adds `SpectreLocalConstraintEvaluation`, `SpectreRotationalTransformDiagnostic`, `spectre_local_unknown_count`, `evaluate_spectre_local_constraints`, and `evaluate_spectre_helicity_constraint`.
+- Extended `src/beltrami_jax/spectre_solve.py`.
+  - Per-volume solves now expose derivative vector-potential blocks.
+  - `solve_spectre_volume_from_input(..., solve_local_constraints=True)` can solve zero-unknown branches, plasma `Lconstraint=2` helicity, plasma `Lconstraint=-2` current, and vacuum `Lconstraint=0` current.
+  - Full multi-volume TOML solves pass the local-constraint flags through to each selected volume.
+- Extended `src/beltrami_jax/spectre_input.py`.
+  - Includes `oita` in parsed constraint metadata so SPECTRE transform branches have access to both inner and outer targets.
+- Updated docs and README.
+  - Documents derivative outputs, plasma-current diagnostics, local helicity/current constraints, and the experimental SPECTRE injection hook.
+
+New SPECTRE fork ingredients in `/Users/rogerio/local/spectre`:
+
+- Added `wrapper_funcs_mod.set_vec_pot`.
+  - This is the setter counterpart to SPECTRE's existing `get_vec_pot`.
+  - It injects a full radial-first `Ate/Aze/Ato/Azo` block into SPECTRE Fortran memory.
+- Added `spectre.utils.set_vec_pot_flat`.
+  - Performs Python-side shape checks and calls the Fortran setter.
+- Added `spectre/beltrami_jax_backend.py`.
+  - Provides `solve_input_file_with_beltrami_jax(...)` and `apply_beltrami_jax_solution(...)`.
+  - Calls `beltrami_jax.solve_spectre_toml(...)` and optionally injects the returned full coefficient block into SPECTRE.
+- Added `SPECTRE.solve_beltrami_jax(...)`.
+  - Experimental Python method for `SPECTRE.from_input_file(...)` objects.
+  - Keeps the default Fortran Beltrami path untouched; this is a validation/integration seam, not a default backend switch.
+- Added SPECTRE optional dependency extra `beltrami-jax`.
+- Added SPECTRE docs under `docs/source/get_started/calculating_field.rst`.
+
+Verification:
+
+- `python -m py_compile` passed for the modified `beltrami_jax` modules.
+- Targeted `beltrami_jax` tests passed: `41 passed in 109.06s`.
+- SPECTRE Python files compile with `python -m py_compile`.
+- SPECTRE Fortran has not been rebuilt in this lane, so `set_vec_pot` still needs a compile/f90wrap validation before an upstream PR.
+
+Important design decision:
+
+- The SPECTRE-side change is intentionally small and optional. It does not yet remove SPECTRE's Fortran Beltrami code path or change default runtime behavior. Instead it creates the minimal reviewed seam needed to compare a full `beltrami_jax` coefficient block inside SPECTRE.
+
+Current remaining blockers:
+
+- Port `magnetic_field_mod.F90::compute_rotational_transform` to JAX and validate `iota` plus derivative rows against SPECTRE dumps.
+- Add the `Lconstraint=1` local Newton loop once rotational-transform diagnostics are available.
+- Add the global/semi-global `Lconstraint=3` force-coupled updates.
+- Rebuild SPECTRE with `set_vec_pot`, run `SPECTRE.solve_beltrami_jax(update_fortran=True)`, and compare injected coefficients, Beltrami errors, force modes, and downstream field diagnostics against the Fortran backend.
+- Add a real backend flag in SPECTRE only after those validation plots are at roundoff-level agreement.
+
+## 18. 2026-04-30 Progress: SPECTRE Runtime Backend Switch and Force-Seam Validation
+
+New completed ingredients in the local SPECTRE fork:
+
+- Rebuilt SPECTRE locally with the new `wrapper_funcs_mod.set_vec_pot` symbol.
+- Made field tracing lazy/optional in `spectre.core.core` and `spectre.__init__`.
+  - The local Python 3.13 environment can install `CyRK`, but `CyRK` cannot load `libomp.dylib`.
+  - SPECTRE import, Beltrami solve, and force workflows no longer require field tracing unless the user explicitly calls tracing APIs.
+- Extended `spectre.beltrami_jax_backend`.
+  - Adds `solve_current_state_with_beltrami_jax(test, ...)`.
+  - Serializes the current in-memory SPECTRE interface state to a temporary TOML file, so optimization/force workflows can solve the geometry currently packed from `xin`, not only the original input file.
+  - Keeps the backend serial-only for now; MPI use raises a clear runtime error instead of silently doing the wrong thing.
+- Extended `SPECTRE.solve_beltrami_jax(...)`.
+  - Adds `use_current_state=True` for force workflows.
+- Extended `spectre.force_targets.force_real(...)`.
+  - Adds `beltrami_backend="fortran" | "jax"`.
+  - The default remains the current Fortran backend.
+  - The JAX path packs interfaces with `unpack_interfaces(xin, test)`, calls `test.solve_beltrami_jax(use_current_state=True, update_fortran=True)`, and then uses the existing SPECTRE `calc_b2mag_jump` force diagnostic.
+- Extended `scripts/run/calc_spectre_field.py`.
+  - Adds `--beltrami-backend {fortran,jax}`.
+  - Adds `--beltrami-jax-local-constraints`.
+
+Runtime validation completed:
+
+- `python -m pip install -e .` succeeded in `/Users/rogerio/local/spectre`.
+- `import spectre` now succeeds.
+- `SPECTRE.from_input_file("tests/compare/G3V3L3Fi/input.toml")` succeeds.
+- `hasattr(obj.wrapper_funcs_mod, "set_vec_pot")` is `True`.
+- `obj.solve_beltrami_jax(update_fortran=True)` on `G3V3L3Fi` injects the returned coefficient block exactly:
+  - JAX linear max relative residual: `8.240902103055836e-13`.
+  - SPECTRE memory injection relative error: `0.0`.
+  - injected coefficient shape: `(19, 23)`.
+- `force_real(..., beltrami_backend="jax")` force-seam comparison against SPECTRE Fortran:
+  - `G3V3L2Fi_stability`, `Lconstraint=2` local helicity branch: relative force error `1.2510234941523128e-12`.
+  - `G3V3L3Fi`, `Lconstraint=3` semi-global flux branch: relative force error `1.6675304372497828e-3`.
+  - `G2V32L1Fi`, `Lconstraint=1` rotational-transform branch: relative force error `2.4055140334128033e-2`.
+- Added reviewer-facing figure:
+  - `docs/_static/spectre_backend_seam_runtime.png`.
+  - `docs/_static/spectre_backend_seam_runtime_summary.json`.
+
+SPECTRE validation caveat:
+
+- `python -m pytest tests/compare/test_compare_to_spec.py -vv -s` in `/Users/rogerio/local/spectre` still fails on the default Fortran cylinder comparison before any JAX backend call:
+  - failure message: `error computing derivatives of mu wrt geometry at fixed transform`;
+  - location: `fortran_src/forces_mod.F90`;
+  - branch: `G2V32L1Fi`, `Lconstraint=1`.
+- This failure is in SPECTRE's existing Fortran derivative path, not in the optional JAX injection path. It reinforces the same open blocker: the rotational-transform branch must be ported and validated before a full SPEC-removal PR can claim coverage of `Lconstraint=1`.
+
+Interpretation:
+
+- The SPECTRE injection mechanism is validated.
+- The force backend switch reaches roundoff-level agreement for a branch whose nonlinear local constraint is now represented in `beltrami_jax`.
+- The two non-roundoff force comparisons are not injection failures. They identify the remaining planned SPEC-removal work:
+  - `Lconstraint=1` needs JAX-native rotational-transform diagnostics.
+  - `Lconstraint=3` needs the SPECTRE global/semi-global flux update.
+
+Current PR readiness status:
+
+- Ready for an internal experimental branch and reviewer discussion of the adapter seam.
+- Not ready for a claim that SPEC/SPECTRE Beltrami is fully removed.
+- The next implementation lane must target `magnetic_field_mod.F90::compute_rotational_transform` and the `Lconstraint=3` global update before changing SPECTRE defaults.

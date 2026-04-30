@@ -16,7 +16,7 @@ The repository currently covers four complementary paths:
 
 The assembled-system and SPECTRE fixture paths are the current scientifically relevant validation paths. The SPECTRE geometry evaluator is the new matrix-assembly foundation. The internal geometry prototype is useful for development and examples, but it is separate from SPECTRE's interface-Fourier geometry path.
 
-This is not yet a full SPECTRE Beltrami backend. SPECTRE TOML input summaries, HDF5 vector-potential coefficient validation, packed radial block layout, SPECTRE-compatible solution-vector pack/unpack maps, local `Lconstraint` branch formulas, JAX-native interface-geometry evaluation, and packaged SPECTRE matrix/RHS/solution fixtures are implemented. Exact JAX-native SPECTRE matrix/integral assembly and field diagnostics remain the core replacement work documented in [SPECTRE_MIGRATION_PLAN.md](SPECTRE_MIGRATION_PLAN.md).
+This is not yet a full SPECTRE Beltrami backend. SPECTRE TOML input summaries, HDF5 vector-potential coefficient validation, packed radial block layout, SPECTRE-compatible solution-vector pack/unpack maps, local `Lconstraint` branch formulas, JAX-native interface-geometry evaluation, SPECTRE `matrixBG` boundary assembly for `dMB/dMG`, and packaged SPECTRE matrix/RHS/solution fixtures are implemented. Exact JAX-native SPECTRE volume-integral assembly for `dMA/dMD` and field diagnostics remain the core replacement work documented in [SPECTRE_MIGRATION_PLAN.md](SPECTRE_MIGRATION_PLAN.md).
 
 The repository ships under the MIT License; see [LICENSE](LICENSE).
 
@@ -78,6 +78,7 @@ Today the repository includes:
 - SPECTRE HDF5 vector-potential readers for `Ate`, `Aze`, `Ato`, and `Azo`
 - coefficient-level SPECTRE vector-potential comparison and plotting tools
 - SPECTRE interface-Fourier geometry evaluation with coordinate-singularity interpolation, free-boundary wall rows, Jacobian, and metric tensor
+- SPECTRE `matrixBG` boundary-source assembly that produces `dMB` and `dMG` from SPECTRE degree-of-freedom maps plus TOML or updated normal-field arrays
 - packed SPECTRE Beltrami layout helpers that split coefficients by volume and free-boundary exterior block
 - SPECTRE-compatible `Ate/Aze/Ato/Azo` degree-of-freedom maps matching `gi00ab`, `lregion`, `preset_mod.F90`, and `packab`
 - differentiable JAX scatter/gather pack/unpack helpers between SPECTRE coefficient arrays and per-volume solution vectors
@@ -100,19 +101,22 @@ The SPECTRE packing layer now reconstructs SPECTRE's internal Fourier ordering a
 
 The SPECTRE linear-system validation layer packages the dense `dMA`, `dMD`, `dMB`, `dMG`, final matrix, RHS, and solved SPECTRE degree-of-freedom vectors exported from released SPECTRE cases. These fixtures are developer validation assets: they prove the JAX linear solve matches SPECTRE once SPECTRE has assembled the system, but they are not the final user-facing SPECTRE input contract.
 
+The SPECTRE boundary-assembly layer now ports `matrixBG`. It builds the flux-coupling matrix `dMB` and boundary-normal-field source `dMG` from `SpectreInputSummary`/`SpectreVolumeDofMap` data. For fixed-boundary shipped cases this matches SPECTRE fixtures exactly; for free-boundary runs the TOML-only path gives the initial source, while exact post-Picard parity requires passing the updated normal-field arrays from the free-boundary iteration.
+
 The SPECTRE backend adapter is intentionally narrow. It does not ask SPECTRE to change geometry, quadrature, matrix assembly, or constraint setup. The first SPECTRE-side experiment can be a small optional branch that passes already assembled arrays to `solve_spectre_assembled_numpy`, copies the returned solution into SPECTRE's existing solution storage, and leaves the Fortran backend as the default fallback.
 
-Validation today has three levels:
+Validation today has several levels:
 
 - `beltrami_jax` dense solves reproduce dumped SPEC matrices, RHS vectors, and packed solutions at machine precision for the committed fixtures.
 - Fresh SPECTRE exports reproduce SPECTRE `reference.h5` vector-potential coefficients with worst global relative coefficient error `1.52e-14` across four public SPECTRE compare cases.
 - JAX solves reproduce 19 released SPECTRE per-volume Beltrami linear systems with worst solution relative error `1.59e-15`.
 - Those four SPECTRE compare cases are packaged under `beltrami_jax.data.spectre_compare` so CI and downstream users can reproduce the coefficient target without installing SPECTRE.
 - Packaged SPECTRE vector-potential coefficients round-trip exactly through the implemented SPECTRE degree-of-freedom maps, including coordinate-singularity axis recombination and free-boundary exterior blocks.
+- SPECTRE `matrixBG` tests reproduce `dMB/dMG` exactly for fixed-boundary public fixtures and reproduce all packaged `dMB/dMG` fixtures when supplied the same updated normal-field source arrays used by SPECTRE.
 - SPECTRE local branch-solve tests now cover every packaged released linear fixture and the `Lconstraint` unknown-count/residual/Jacobian branch table with injected transform/current diagnostics.
 - SPECTRE geometry tests now cover allrzrz/free-boundary wall parsing, coordinate-singularity interpolation, finite Jacobian/metric evaluation, metric symmetry, and autodiff through radial interpolation.
 
-The remaining SPECTRE replacement milestone is stronger: assemble SPECTRE-equivalent `dMA`, `dMD`, `dMB`, and `dMG` from the JAX-native geometry/metric layer, compute transform/current diagnostics from the solved fields, and produce the same `Ate`, `Aze`, `Ato`, and `Azo` coefficients directly from SPECTRE TOML/interface geometry.
+The remaining SPECTRE replacement milestone is stronger: assemble SPECTRE-equivalent `dMA` and `dMD` from the JAX-native geometry/metric layer, compute transform/current diagnostics from the solved fields, and produce the same `Ate`, `Aze`, `Ato`, and `Azo` coefficients directly from SPECTRE TOML/interface geometry.
 
 ## Installation
 
@@ -189,8 +193,8 @@ The example scripts are intentionally standalone. Each script keeps its input pa
 
 Latest local release gate:
 
-- `91 passed in 35.40s`
-- `93.16%` total line coverage
+- `96 passed in 29.96s`
+- `93.23%` total line coverage
 - strict Sphinx build passed with `-W`
 - runtime code does not depend on `tomllib`, so Python `3.10+` support is not blocked by stdlib TOML parsing differences
 

@@ -1752,6 +1752,64 @@ Verification after adding branch constraints and geometry:
 
 Current next lane:
 
-- Port SPECTRE `matrixBG` first because it is lower-dimensional and directly defines the `dMB/dMG` source terms.
+- Port SPECTRE `matrixBG` first because it is lower-dimensional and directly defines the `dMB/dMG` source terms. Completed in the next log entry.
 - Then port `matrix`/`intghs` contractions for `dMA/dMD`, using the new `SpectreCoordinateGrid` as the geometry/metric input.
 - Compare JAX-assembled matrix components against packaged released-SPECTRE linear fixtures before attempting an end-to-end coefficient solve.
+
+## 23. 2026-04-30 Addendum: SPECTRE `matrixBG` Boundary Assembly
+
+Goal of this lane:
+
+- Continue toward removing SPEC/SPECTRE Fortran assembly.
+- Implement the low-dimensional SPECTRE `matrixBG` path before the harder volume-integral `matrix`/`intghs` path.
+- Produce `dMB/dMG` directly from SPECTRE TOML metadata, packed degree-of-freedom maps, and boundary-normal-field arrays.
+
+Files added:
+
+- `src/beltrami_jax/spectre_matrix.py`
+  - `SpectreBoundaryNormalField` stores SPECTRE internal-mode `iVns`, `iBns`, `iVnc`, and `iBnc` arrays.
+  - `SpectreMatrixBG` stores assembled `d_mb` and `d_mg`.
+  - `build_spectre_boundary_normal_field` reconstructs initialized SPECTRE normal-field arrays from TOML tables using the `preset_mod.F90` recombination rules.
+  - `assemble_spectre_matrix_bg` ports `matrices_mod.F90::matrixBG` using JAX scatter operations on `Lme/Lmf/Lmg/Lmh` maps.
+  - `assemble_spectre_matrix_bg_from_input` provides a one-call TOML plus one-based-volume entry point.
+- `tests/test_spectre_matrix.py`
+  - Tests exact fixed-boundary parity for `dMB/dMG` against packaged released-SPECTRE fixtures.
+  - Tests free-boundary initial-source assembly from TOML and exact post-Picard fixture parity when the updated normal-field source is supplied.
+  - Tests exact `dMB/dMG` parity for all 19 packaged released-SPECTRE fixtures when using fixture-equivalent normal-field arrays.
+  - Tests non-stellarator-symmetric `Lmf`/`iVnc+iBnc` behavior with synthetic metadata.
+  - Tests invalid volume and normal-field shape errors.
+
+Files modified:
+
+- `src/beltrami_jax/__init__.py`
+  - Exports the new `spectre_matrix` API.
+- `README.md`
+  - Documents `matrixBG` as implemented and narrows the remaining matrix-assembly gap to `dMA/dMD` volume integrals.
+- `docs/api.md`, `docs/integration.md`, `docs/overview.md`, `docs/theory.md`, `docs/validation.md`, `docs/limitations.md`
+  - Document the new API, equations, validation scope, and current boundary.
+- `SPECTRE_MIGRATION_PLAN.md`
+  - Adds the `matrixBG` progress entry and updates Phase 4 status.
+
+Design decisions:
+
+- `matrixBG` remains separate from future `spectre_integrals`/`spectre_assembly` code because it depends only on packed maps and boundary-normal-field arrays. This gives a small, testable replacement ingredient and avoids mixing it into the harder quadrature work.
+- Free-boundary TOML input only represents the initial normal-field tables. SPECTRE can update `iBns/iBnc` during Picard iterations, so exact parity with final free-boundary fixtures requires passing updated arrays into `SpectreBoundaryNormalField`.
+- The public API supports both modes: `assemble_spectre_matrix_bg_from_input` for TOML-driven initial assembly and `assemble_spectre_matrix_bg` for live SPECTRE-state parity.
+
+What worked:
+
+- The fixed-boundary public SPECTRE fixtures have exact `dMB/dMG` parity from TOML input.
+- All packaged SPECTRE fixtures have exact `dMB/dMG` parity when supplied the same normal-field source represented by the fixture.
+- The non-stellarator-symmetric synthetic test exercises the odd-parity source rows not present in the public stellarator-symmetric compare suite.
+
+Verification in progress:
+
+- Targeted `tests/test_spectre_matrix.py` tests passed; the isolated run tripped only the global coverage threshold because it intentionally ran one test file.
+- Full local test suite passed: `96 passed in 29.96s`, total coverage `93.23%`.
+- Strict docs/build verification should be run after this log entry before committing.
+
+Current next lane:
+
+- Port the SPECTRE/SPEC `matrix` and `intghs` volume-integral contractions for `dMA/dMD`.
+- Use the packaged released-SPECTRE linear fixtures as component targets.
+- After `dMA/dMD` parity, combine JAX `dMA/dMD`, JAX `matrixBG` `dMB/dMG`, branch solves, and `spectre_pack` unpacking to generate `Ate/Aze/Ato/Azo` directly from SPECTRE TOML/interface geometry.

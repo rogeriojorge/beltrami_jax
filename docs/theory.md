@@ -170,8 +170,41 @@ g_{\zeta\zeta}
 $$
 
 The current JAX implementation covers this interface-geometry layer. It still
-does not assemble SPECTRE's `dMA`, `dMD`, `dMB`, and `dMG` matrices from these
-metric quantities.
+does not assemble SPECTRE's `dMA` and `dMD` volume-integral matrices from
+these metric quantities.
+
+## SPECTRE `matrixBG` boundary assembly
+
+SPECTRE separates the low-dimensional boundary-source assembly from the
+geometry-dependent volume integrals. In `matrices_mod.F90::matrixBG`, the
+flux-coupling matrix `dMB` is nonzero only on the axis/mean-mode Lagrange rows:
+
+$$
+(dMB)_{L_{mg}(0,0),\,\Delta\psi_t} = -1,
+\qquad
+(dMB)_{L_{mh}(0,0),\,\Delta\psi_p} = +1,
+$$
+
+when those rows exist in the packed volume map. The boundary-normal-field
+source is assembled on the outer-boundary Lagrange rows. For stellarator
+symmetry,
+
+$$
+(dMG)_{L_{me}(m,n)} = -\left(iV^{ns}_{mn} + iB^{ns}_{mn}\right),
+\qquad (m,n)\ne(0,0),
+$$
+
+and without stellarator symmetry the odd-parity rows also receive
+
+$$
+(dMG)_{L_{mf}(m,n)} = -\left(iV^{nc}_{mn} + iB^{nc}_{mn}\right).
+$$
+
+`build_spectre_boundary_normal_field` reconstructs the initialized SPECTRE
+normal-field arrays from TOML tables using the same mode recombination as
+`preset_mod.F90`. Free-boundary runs may update `iBns/iBnc` during Picard
+iterations, so exact post-update parity requires passing those live updated
+arrays through `SpectreBoundaryNormalField`.
 
 ## SPECTRE branch derivatives and constraints
 

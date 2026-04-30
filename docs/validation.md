@@ -68,6 +68,7 @@ These figures summarize:
 - SPECTRE `Ate`, `Aze`, `Ato`, and `Azo` HDF5 coefficient parity for public SPECTRE compare cases
 - SPECTRE `dMA`, `dMD`, `dMB`, `dMG`, matrix, RHS, and solved degree-of-freedom parity for released SPECTRE volume solves
 - SPECTRE interface geometry, Jacobian, and metric tensor evaluation from packaged TOML input
+- SPECTRE `matrixBG` `dMB/dMG` boundary assembly parity for fixed-boundary fixtures and exact updated-normal-field source parity for all packaged fixtures
 
 Release-gate example outputs generated from the current source tree:
 
@@ -161,6 +162,8 @@ The test suite verifies:
 - `build_spectre_interface_geometry` parses SPECTRE `allrzrz` interface rows and free-boundary wall rows from TOML input into internal Fourier mode order.
 - `interpolate_spectre_volume_geometry` is tested for coordinate-singularity and non-axis interpolation consistency.
 - `evaluate_spectre_volume_coordinates` is tested for finite Jacobian/metric values, metric symmetry, and JAX autodiff through the radial interpolation coordinate.
+- `build_spectre_boundary_normal_field` reconstructs SPECTRE's initialized `iVns/iBns/iVnc/iBnc` normal-field arrays from TOML tables.
+- `assemble_spectre_matrix_bg` and `assemble_spectre_matrix_bg_from_input` reproduce SPECTRE `matrixBG` `dMB/dMG` for fixed-boundary public fixtures; for the free-boundary fixture the TOML-only path is tested as the initial source and the updated-normal-field path reproduces the packaged post-Picard fixture exactly.
 
 Current public SPECTRE compare-case results:
 
@@ -214,6 +217,8 @@ Current released-SPECTRE linear parity:
 - backend adapter solution parity: below `3e-12` for all packaged fixtures
 - branch-solve solution parity: below `3e-12` for all packaged fixtures
 - branch-solve primary residuals: below `1e-11` for all packaged fixtures, including the ill-conditioned compact free-boundary axis volume
+- `matrixBG` fixed-boundary `dMB/dMG` parity: exact for all packaged fixed-boundary fixtures
+- `matrixBG` updated-normal-field `dMB/dMG` parity: exact for all 19 packaged released-SPECTRE fixtures
 
 Programmatic access:
 
@@ -247,7 +252,7 @@ This validates the branch contract before the JAX-native field diagnostic layer 
 The repository enforces a coverage threshold in `pyproject.toml`:
 
 - required line coverage: at least 90%
-- current release-gate result: `91 passed` with `93.16%` line coverage
+- current release-gate result: `96 passed` with `93.23%` line coverage
 
 ## Known validation gaps
 
@@ -257,7 +262,7 @@ Remaining validation work includes:
 
 - comparisons against later SPECTRE integration points beyond exported matrix/RHS/solution fixtures
 - JAX-native generation of SPECTRE HDF5 vector-potential coefficients `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`
-- JAX-native assembly of SPECTRE `dMA`, `dMD`, `dMB`, and `dMG` from the new geometry/metric layer
+- JAX-native assembly of SPECTRE `dMA` and `dMD` from the new geometry/metric layer
 - JAX-native transform/current diagnostics from solved fields rather than injected diagnostic arrays
 - broader 3D fixture coverage closer to anticipated SPECTRE use cases
 - end-to-end SPECTRE fork integration once matrix assembly and diagnostics are complete

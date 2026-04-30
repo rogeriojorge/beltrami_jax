@@ -38,6 +38,7 @@ The main implementation files are:
 - `src/beltrami_jax/spectre_io.py`
 - `src/beltrami_jax/spectre_layout.py`
 - `src/beltrami_jax/spectre_linear.py`
+- `src/beltrami_jax/spectre_matrix.py`
 - `src/beltrami_jax/spectre_pack.py`
 - `src/beltrami_jax/spectre_validation.py`
 - `src/beltrami_jax/diagnostics.py`
@@ -141,6 +142,14 @@ These are the files to read if you want to understand how the package maps geome
 .. automodule:: beltrami_jax.spectre_geometry
    :members:
    :exclude-members: Array, ArrayLike
+```
+
+## SPECTRE boundary matrix assembly
+
+```{eval-rst}
+.. automodule:: beltrami_jax.spectre_matrix
+   :members:
+   :exclude-members: Array
 ```
 
 ## SPECTRE HDF5 vector-potential IO

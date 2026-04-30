@@ -120,6 +120,7 @@ Current supported use:
 - read SPECTRE HDF5 vector-potential coefficients
 - compare fresh SPECTRE coefficient exports against `reference.h5`
 - evaluate SPECTRE `allrzrz`/wall interface geometry in JAX, including volume interpolation, Jacobian, and metric tensor
+- assemble SPECTRE `matrixBG` boundary terms `dMB/dMG` from packed maps plus TOML or updated normal-field arrays
 - load packaged public SPECTRE compare cases for reproducible CI validation
 - reconstruct SPECTRE's internal Fourier mode order and packed radial block layout
 - pack and unpack SPECTRE-compatible per-volume solution vectors to/from `Ate`, `Aze`, `Ato`, and `Azo`
@@ -148,6 +149,9 @@ Current safe entry points:
 - `build_spectre_interface_geometry`
 - `interpolate_spectre_volume_geometry`
 - `evaluate_spectre_volume_coordinates`
+- `build_spectre_boundary_normal_field`
+- `assemble_spectre_matrix_bg`
+- `assemble_spectre_matrix_bg_from_input`
 - `spectre_fourier_modes`
 - `list_packaged_spectre_cases`
 - `load_packaged_spectre_case`
@@ -260,6 +264,47 @@ For differentiable coupling, use `pack_vector_potential_jax` and
 objectives downstream of the packed solution vectors remain compatible with
 `jax.grad`.
 
+## SPECTRE `matrixBG` boundary assembly workflow
+
+SPECTRE's `matrices_mod.F90::matrixBG` constructs the flux-coupling matrix
+`dMB` and the boundary-normal-field source vector `dMG`. This low-dimensional
+piece is now available without calling SPECTRE:
+
+```python
+from beltrami_jax import (
+    assemble_spectre_matrix_bg_from_input,
+    load_spectre_input_toml,
+)
+
+summary = load_spectre_input_toml("input.toml")
+matrix_bg = assemble_spectre_matrix_bg_from_input(summary, lvol=1)
+print(matrix_bg.d_mb.shape, matrix_bg.d_mg.shape)
+```
+
+For free-boundary calculations, SPECTRE can update `iBns/iBnc` during the
+Picard boundary-normal-field iteration. The TOML-only helper reconstructs the
+initial source. For exact post-update parity, pass the live updated arrays:
+
+```python
+from beltrami_jax import (
+    SpectreBoundaryNormalField,
+    assemble_spectre_matrix_bg,
+    build_spectre_dof_layout,
+)
+
+dof_layout = build_spectre_dof_layout(summary)
+normal_field = SpectreBoundaryNormalField(
+    ivns=updated_ivns,
+    ibns=updated_ibns,
+    ivnc=updated_ivnc,
+    ibnc=updated_ibnc,
+)
+matrix_bg = assemble_spectre_matrix_bg(dof_layout.volume_maps[lvol - 1], normal_field)
+```
+
+This closes the `dMB/dMG` assembly lane. The remaining SPECTRE assembly
+blocker is the volume-integral construction of `dMA/dMD`.
+
 ## SPECTRE linear-system validation workflow
 
 When SPECTRE has already assembled `dMA`, `dMD`, `dMB`, and `dMG`, the current
@@ -282,9 +327,10 @@ print(float(result.relative_residual_norm))
 This workflow validates the linear algebra and branch-specific RHS assembly
 after SPECTRE's Fortran geometry assembly has run. It does not yet remove
 SPECTRE's Fortran assembly path. The final integration lane is to replace the
-upstream construction of `dMA`, `dMD`, `dMB`, and `dMG` with JAX-native
-SPECTRE interface-geometry assembly, then unpack the solved vectors through the
-existing SPECTRE `Ate/Aze/Ato/Azo` maps.
+upstream construction of `dMA` and `dMD` with JAX-native SPECTRE
+interface-geometry assembly, then combine those matrices with the JAX-native
+`matrixBG` `dMB/dMG` path and unpack the solved vectors through the existing
+SPECTRE `Ate/Aze/Ato/Azo` maps.
 
 ## SPECTRE interface-geometry workflow
 
@@ -319,9 +365,10 @@ Implemented at this layer:
 - Linear interpolation between neighboring interfaces for non-axis volumes.
 - First derivatives, Jacobian, inverse Jacobian, and covariant metric tensor.
 
-This still stops before matrix assembly. The next implementation step is to
-feed these metric quantities into the SPECTRE/SPEC `matrix`/`intghs` integral
-formulas to produce `dMA`, `dMD`, `dMB`, and `dMG` without Fortran.
+This still stops before volume-integral matrix assembly. The next
+implementation step is to feed these metric quantities into the SPECTRE/SPEC
+`matrix`/`intghs` integral formulas to produce `dMA` and `dMD` without
+Fortran; `dMB/dMG` are already covered by the `matrixBG` port above.
 
 ## SPECTRE branch/constraint workflow
 
@@ -405,6 +452,6 @@ Performance notes:
 
 ## Current boundary
 
-The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, and SPECTRE local branch/constraint models, but it is still not a full SPECTRE backend. The main remaining work is JAX-native SPECTRE matrix/integral assembly and field diagnostics that produce transform/current constraints directly from solved JAX fields.
+The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, SPECTRE `matrixBG` boundary assembly, and SPECTRE local branch/constraint models, but it is still not a full SPECTRE backend. The main remaining work is JAX-native SPECTRE `dMA/dMD` volume-integral assembly and field diagnostics that produce transform/current constraints directly from solved JAX fields.
 
 See the root-level `SPECTRE_MIGRATION_PLAN.md` for the current SPECTRE replacement plan.

@@ -24,7 +24,7 @@ The solution vector $\mathbf{a}$ contains packed vector-potential coefficients. 
 
 ## Implemented model in `beltrami_jax`
 
-The package currently supports three complementary workflows:
+The package currently supports four complementary workflows:
 
 - dumped SPEC regression, where the geometry-dependent matrices are loaded from a SPEC export
 - internal Fourier-geometry prototype assembly, where `beltrami_jax` builds matrices for a shaped large-aspect-ratio torus and then runs the same solve machinery
@@ -81,6 +81,8 @@ The package currently provides:
   - evaluates the `Lconstraint` residual/Jacobian branch table once rotational-transform/current diagnostics are supplied
 - `build_spectre_interface_geometry`, `interpolate_spectre_volume_geometry`, `evaluate_spectre_volume_coordinates`
   - provide the first JAX-native SPECTRE interface-geometry layer: Fourier interfaces, volume interpolation, coordinates, Jacobian, and metric tensor
+- `build_spectre_boundary_normal_field`, `assemble_spectre_matrix_bg`, `assemble_spectre_matrix_bg_from_input`
+  - port SPECTRE `matrixBG`, producing `dMB` and `dMG` from packed maps plus TOML or updated normal-field arrays
 - `save_problem_json`, `load_problem_json`, `save_nonlinear_solution`
   - handle user-facing input and output files for standalone workflows
 
@@ -126,9 +128,9 @@ The example scripts print progress and diagnostics. This is intentional. The goa
 This package now performs prototype internal geometry assembly, Krylov solves, and a helicity-constrained outer loop, but it still does not cover:
 
 - every SPEC/SPECTRE branch and auxiliary matrix path
-- SPECTRE's exact interface-Fourier geometry input and integral assembly
+- SPECTRE's exact `dMA/dMD` volume-integral assembly
 - JAX-native HDF5 vector-potential coefficient generation matching `Ate`, `Aze`, `Ato`, and `Azo`
-- JAX-native generation of the released SPECTRE linear-system matrices from TOML/interface geometry
+- JAX-native generation of complete released SPECTRE linear-system matrices from TOML/interface geometry
 - full sparse production scaling
 - the broader equilibrium and constraint machinery beyond the supported Beltrami workflow
 

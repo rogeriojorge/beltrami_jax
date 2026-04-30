@@ -16,6 +16,10 @@ from .spectre_io import (
     load_spectre_reference_h5,
     load_spectre_vector_potential_npz,
 )
+from .spectre_layout import (
+    SpectreBeltramiLayout,
+    build_spectre_beltrami_layout_for_vector_potential,
+)
 
 PACKAGED_SPECTRE_CASES = (
     "G2V32L1Fi",
@@ -33,6 +37,7 @@ class PackagedSpectreCase:
     input_summary: SpectreInputSummary
     reference: SpectreH5Reference
     candidate: SpectreVectorPotential
+    layout: SpectreBeltramiLayout
     comparison: SpectreVectorPotentialComparison
 
     @property
@@ -84,11 +89,15 @@ def load_packaged_spectre_case(label: str) -> PackagedSpectreCase:
         candidate = load_spectre_vector_potential_npz(candidate_npz)
 
     comparison = compare_vector_potentials(candidate, reference.vector_potential, label=label)
+    layout = build_spectre_beltrami_layout_for_vector_potential(
+        input_summary, reference.vector_potential
+    )
     return PackagedSpectreCase(
         label=label,
         input_summary=input_summary,
         reference=reference,
         candidate=candidate,
+        layout=layout,
         comparison=comparison,
     )
 

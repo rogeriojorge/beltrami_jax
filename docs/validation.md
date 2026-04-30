@@ -138,6 +138,7 @@ The test suite verifies:
 - `load_spectre_input_toml` normalizes SPECTRE TOML metadata including geometry flags, resolution, `Lrad`, flux arrays, constraints, free-boundary options, and Fourier boundary tables.
 - `load_spectre_reference_h5` reads `vector_potential/Ate`, `Aze`, `Ato`, and `Azo` from SPECTRE reference files and transposes from SPECTRE HDF5 layout to radial-first Python layout.
 - `compare_vector_potentials` reports component-wise and global relative errors and max absolute coefficient differences.
+- `build_spectre_beltrami_layout_for_vector_potential` validates packed radial slices and identifies free-boundary exterior blocks from `Lrad`.
 - `tools/export_spectre_vecpot_npz.py` runs from a SPECTRE environment and exports fresh coefficients from `spectre.get_vec_pot_flat`.
 - The four public SPECTRE compare cases are packaged under `src/beltrami_jax/data/spectre_compare/`.
 - `tools/generate_spectre_validation_assets.py --use-packaged` compares those packaged fresh exports against packaged SPECTRE `reference.h5` files and writes the committed parity figure.
@@ -165,7 +166,7 @@ for label in list_packaged_spectre_cases():
 The repository enforces a coverage threshold in `pyproject.toml`:
 
 - required line coverage: at least 90%
-- current release-gate result: `40 passed` with `95.23%` line coverage
+- current release-gate result: `44 passed` with `95.36%` line coverage
 
 ## Known validation gaps
 

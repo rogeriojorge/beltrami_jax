@@ -25,6 +25,7 @@ def test_packaged_spectre_cases_have_machine_precision_coefficient_parity():
 
     for case in cases:
         assert case.vector_potential_shape[0] == case.input_summary.radial_size
+        assert case.layout.shape == case.vector_potential_shape
         assert case.comparison.global_max_abs_error < 2.0e-15
         assert case.comparison.component_relative_errors["ato"] == 0.0
         assert case.comparison.component_relative_errors["azo"] == 0.0

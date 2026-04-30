@@ -63,6 +63,8 @@ The package currently provides:
   - loads SPECTRE TOML metadata into a normalized input summary
 - `load_spectre_reference_h5`, `compare_vector_potentials`
   - load and compare SPECTRE HDF5 `Ate`, `Aze`, `Ato`, and `Azo` coefficient arrays
+- `build_spectre_beltrami_layout_for_vector_potential`
+  - maps SPECTRE `Lrad` metadata onto packed volume/exterior coefficient slices
 - `load_packaged_spectre_case`
   - loads packaged public SPECTRE compare cases for reproducible coefficient-target tests
 - `save_problem_json`, `load_problem_json`, `save_nonlinear_solution`

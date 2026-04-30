@@ -33,6 +33,12 @@ from .spectre_io import (
     load_spectre_vector_potential_npz,
     save_spectre_vector_potential_npz,
 )
+from .spectre_layout import (
+    SpectreBeltramiLayout,
+    SpectreVolumeBlock,
+    build_spectre_beltrami_layout,
+    build_spectre_beltrami_layout_for_vector_potential,
+)
 from .spectre_validation import (
     PackagedSpectreCase,
     list_packaged_spectre_cases,
@@ -72,7 +78,9 @@ __all__ = [
     "SolveResult",
     "SpecLinearSystemReference",
     "SpectreH5Reference",
+    "SpectreBeltramiLayout",
     "SpectreInputSummary",
+    "SpectreVolumeBlock",
     "SpectreVectorPotential",
     "SpectreVectorPotentialComparison",
     "assemble_fourier_beltrami_system",
@@ -82,6 +90,8 @@ __all__ = [
     "benchmark_parameter_scan",
     "benchmark_solve",
     "build_fourier_mode_basis",
+    "build_spectre_beltrami_layout",
+    "build_spectre_beltrami_layout_for_vector_potential",
     "collocation_grid",
     "compare_against_reference",
     "compare_vector_potentials",

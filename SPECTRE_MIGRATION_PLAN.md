@@ -95,6 +95,7 @@ Completed `beltrami_jax` work:
 - Added `examples/validate_spectre_vector_potential.py`.
 - Added `tools/export_spectre_vecpot_npz.py` and `tools/generate_spectre_validation_assets.py`.
 - Added packaged public SPECTRE compare cases under `src/beltrami_jax/data/spectre_compare/` so coefficient parity is reproducible without a local SPECTRE checkout.
+- Added `src/beltrami_jax/spectre_layout.py` to turn SPECTRE `Lrad` metadata into packed volume/exterior slices.
 - Generated `docs/_static/spectre_vecpot_parity.png`, showing worst global relative coefficient error `1.52e-14` across four public SPECTRE compare cases.
 
 Required remaining `beltrami_jax` work:

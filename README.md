@@ -76,6 +76,7 @@ Today the repository includes:
 - SPECTRE TOML input-summary loading for geometry, resolution, flux, constraint, and Fourier-boundary metadata
 - SPECTRE HDF5 vector-potential readers for `Ate`, `Aze`, `Ato`, and `Azo`
 - coefficient-level SPECTRE vector-potential comparison and plotting tools
+- packed SPECTRE Beltrami layout helpers that split coefficients by volume and free-boundary exterior block
 - packaged public SPECTRE compare cases for reproducible CI validation without a local SPECTRE checkout
 - standalone example workflows that define geometries, write input files, run solves, save outputs, and generate figures
 - tests that cover dumped SPEC systems and the internal geometry-driven workflow
@@ -159,8 +160,8 @@ The example scripts are intentionally standalone. Each script keeps its input pa
 
 Latest local release gate:
 
-- `40 passed in 23.59s`
-- `95.23%` total line coverage
+- `44 passed in 26.11s`
+- `95.36%` total line coverage
 - strict Sphinx build passed with `-W`
 - runtime code does not depend on `tomllib`, so Python `3.10+` support is not blocked by stdlib TOML parsing differences
 
@@ -309,6 +310,7 @@ The current SPECTRE-facing utilities can already inspect SPECTRE TOML inputs and
 
 ```python
 from beltrami_jax import (
+    build_spectre_beltrami_layout_for_vector_potential,
     compare_vector_potentials,
     load_packaged_spectre_case,
     load_spectre_input_toml,
@@ -321,10 +323,12 @@ reference = load_spectre_reference_h5("/path/to/spectre/reference.h5").vector_po
 candidate = load_spectre_vector_potential_npz("/path/to/fresh_spectre_export.npz")
 comparison = compare_vector_potentials(candidate, reference, label="case")
 packaged_case = load_packaged_spectre_case("G3V3L3Fi")
+layout = build_spectre_beltrami_layout_for_vector_potential(summary, reference)
 
 print(summary.lrad)
 print(comparison.global_relative_error)
 print(packaged_case.comparison.global_relative_error)
+print(layout.blocks[0].radial_slice)
 ```
 
 The intended JAX-native replacement contract is:

@@ -136,6 +136,7 @@ Current safe entry points:
 - `load_spectre_reference_h5`
 - `load_spectre_vector_potential_npz`
 - `compare_vector_potentials`
+- `build_spectre_beltrami_layout_for_vector_potential`
 - `list_packaged_spectre_cases`
 - `load_packaged_spectre_case`
 

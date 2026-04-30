@@ -526,6 +526,8 @@ Source package:
   - SPECTRE TOML metadata loading and normalization
 - `src/beltrami_jax/spectre_io.py`
   - SPECTRE HDF5 vector-potential loading, NPZ exchange, and coefficient comparisons
+- `src/beltrami_jax/spectre_layout.py`
+  - maps SPECTRE `Lrad` metadata to packed radial block slices, including free-boundary exterior blocks
 - `src/beltrami_jax/spectre_validation.py`
   - packaged public SPECTRE compare-case loader and comparison summaries
 - `src/beltrami_jax/data/`
@@ -1433,6 +1435,27 @@ Verification after packaging these cases:
 - `./.venv/bin/python -m pytest`
   - `40 passed in 23.59s`
   - total coverage `95.23%`
+
+### 2026-04-30: SPECTRE packed-layout scaffold
+
+Implemented:
+
+- Added `src/beltrami_jax/spectre_layout.py`.
+- Added `SpectreVolumeBlock` and `SpectreBeltramiLayout`.
+- Layouts are built from `SpectreInputSummary.lrad` and a vector-potential mode count.
+- The layout identifies normal plasma blocks and the optional free-boundary exterior block.
+- Added tests that split the packaged SPECTRE vector-potential arrays by block and verify the slices.
+
+Purpose:
+
+- This is the intermediate contract needed before exact JAX solution-vector pack/unpack.
+- The next step is to map SPECTRE's Fortran solution-vector ordering onto this radial-block layout and then verify `Ate/Aze/Ato/Azo` generation from JAX-owned coefficients.
+
+Verification after adding the layout scaffold:
+
+- `./.venv/bin/python -m pytest`
+  - `44 passed in 26.11s`
+  - total coverage `95.36%`
 
 ## 19. Notes For Future Updates
 

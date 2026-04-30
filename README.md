@@ -3,11 +3,11 @@
 [![CI](https://github.com/rogeriojorge/beltrami_jax/actions/workflows/ci.yml/badge.svg)](https://github.com/rogeriojorge/beltrami_jax/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/rogeriojorge/beltrami_jax/blob/main/LICENSE)
-[![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](https://github.com/rogeriojorge/beltrami_jax/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen.svg)](https://github.com/rogeriojorge/beltrami_jax/actions/workflows/ci.yml)
 
 `beltrami_jax` is a differentiable JAX implementation of the SPEC/SPECTRE-style Beltrami workflow used inside multi-region relaxed MHD calculations.
 
-The repository currently covers two complementary paths:
+The repository currently covers three complementary paths:
 
 - a SPEC-style assembled-system path, where already assembled `A`, `D`, `B`, optional `G`, fluxes, and reference solutions are loaded for validation and solving
 - an internal geometry prototype, where a shaped large-aspect-ratio torus is assembled in JAX for examples, autodiff, and workflow development
@@ -15,7 +15,7 @@ The repository currently covers two complementary paths:
 
 The first path is the current scientifically relevant validation path. The second path is useful for development, but it is not yet SPECTRE's full arbitrary 3D Fourier-interface geometry assembly.
 
-This is not yet a full SPECTRE Beltrami backend. SPECTRE TOML input summaries and HDF5 vector-potential coefficient validation are implemented, but exact JAX-native SPECTRE interface-geometry assembly, SPECTRE pack/unpack from a JAX solution vector, and full local-constraint branch parity remain the core replacement work documented in [SPECTRE_MIGRATION_PLAN.md](/Users/rogerio/local/beltrami_jax/SPECTRE_MIGRATION_PLAN.md).
+This is not yet a full SPECTRE Beltrami backend. SPECTRE TOML input summaries, HDF5 vector-potential coefficient validation, packed radial block layout, and SPECTRE-compatible solution-vector pack/unpack maps are implemented. Exact JAX-native SPECTRE interface-geometry assembly and full local-constraint branch parity remain the core replacement work documented in [SPECTRE_MIGRATION_PLAN.md](/Users/rogerio/local/beltrami_jax/SPECTRE_MIGRATION_PLAN.md).
 
 The repository ships under the MIT License; see [LICENSE](/Users/rogerio/local/beltrami_jax/LICENSE).
 
@@ -77,6 +77,8 @@ Today the repository includes:
 - SPECTRE HDF5 vector-potential readers for `Ate`, `Aze`, `Ato`, and `Azo`
 - coefficient-level SPECTRE vector-potential comparison and plotting tools
 - packed SPECTRE Beltrami layout helpers that split coefficients by volume and free-boundary exterior block
+- SPECTRE-compatible `Ate/Aze/Ato/Azo` degree-of-freedom maps matching `gi00ab`, `lregion`, `preset_mod.F90`, and `packab`
+- differentiable JAX scatter/gather pack/unpack helpers between SPECTRE coefficient arrays and per-volume solution vectors
 - packaged public SPECTRE compare cases for reproducible CI validation without a local SPECTRE checkout
 - standalone example workflows that define geometries, write input files, run solves, save outputs, and generate figures
 - tests that cover dumped SPEC systems and the internal geometry-driven workflow
@@ -89,11 +91,14 @@ The current geometry-driven input is `FourierBeltramiGeometry`. It is intentiona
 
 The SPECTRE-facing input layer now reads SPECTRE TOML files into `SpectreInputSummary`, including `nvol`, `nfp`, `mpol`, `ntor`, `lrad`, flux arrays, constraint metadata, free-boundary settings, and normalized Fourier boundary tables. The HDF5 validation layer reads and compares `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`.
 
+The SPECTRE packing layer now reconstructs SPECTRE's internal Fourier ordering and integer degree-of-freedom maps for every packed volume. It can pack coefficient arrays into the same per-volume solution-vector layout used by `packab('P', ...)`, unpack solved vectors back to `Ate/Aze/Ato/Azo`, and perform the same operations with JAX scatter/gather primitives for differentiable integration.
+
 Validation today has two levels:
 
 - `beltrami_jax` dense solves reproduce dumped SPEC matrices, RHS vectors, and packed solutions at machine precision for the committed fixtures.
 - Fresh SPECTRE exports reproduce SPECTRE `reference.h5` vector-potential coefficients with worst global relative coefficient error `1.52e-14` across four public SPECTRE compare cases.
 - Those four SPECTRE compare cases are packaged under `beltrami_jax.data.spectre_compare` so CI and downstream users can reproduce the coefficient target without installing SPECTRE.
+- Packaged SPECTRE vector-potential coefficients round-trip exactly through the implemented SPECTRE degree-of-freedom maps, including coordinate-singularity axis recombination and free-boundary exterior blocks.
 
 The remaining SPECTRE replacement milestone is stronger: make the JAX-native assembly and solve path produce those same `Ate`, `Aze`, `Ato`, and `Azo` coefficients directly from SPECTRE TOML/interface geometry.
 
@@ -160,8 +165,8 @@ The example scripts are intentionally standalone. Each script keeps its input pa
 
 Latest local release gate:
 
-- `44 passed in 26.11s`
-- `95.36%` total line coverage
+- `50 passed in 21.59s`
+- `94.01%` total line coverage
 - strict Sphinx build passed with `-W`
 - runtime code does not depend on `tomllib`, so Python `3.10+` support is not blocked by stdlib TOML parsing differences
 
@@ -311,6 +316,7 @@ The current SPECTRE-facing utilities can already inspect SPECTRE TOML inputs and
 ```python
 from beltrami_jax import (
     build_spectre_beltrami_layout_for_vector_potential,
+    build_spectre_dof_layout_for_vector_potential,
     compare_vector_potentials,
     load_packaged_spectre_case,
     load_spectre_input_toml,
@@ -324,11 +330,15 @@ candidate = load_spectre_vector_potential_npz("/path/to/fresh_spectre_export.npz
 comparison = compare_vector_potentials(candidate, reference, label="case")
 packaged_case = load_packaged_spectre_case("G3V3L3Fi")
 layout = build_spectre_beltrami_layout_for_vector_potential(summary, reference)
+dof_layout = build_spectre_dof_layout_for_vector_potential(summary, reference)
+solutions = dof_layout.pack_vector_potential(reference)
+roundtrip = dof_layout.unpack_solutions(solutions)
 
 print(summary.lrad)
 print(comparison.global_relative_error)
 print(packaged_case.comparison.global_relative_error)
 print(layout.blocks[0].radial_slice)
+print(dof_layout.solution_sizes)
 ```
 
 The intended JAX-native replacement contract is:
@@ -336,7 +346,7 @@ The intended JAX-native replacement contract is:
 1. provide SPECTRE interface Fourier geometry, basis metadata, fluxes, and target constraints
 2. assemble SPECTRE-equivalent `A`, `D`, `B`, and optional `G` operators in JAX
 3. solve with the same branch logic as SPECTRE's Beltrami path
-4. return packed coefficients and SPECTRE-compatible `Ate`, `Aze`, `Ato`, and `Azo`
+4. return packed coefficients and SPECTRE-compatible `Ate`, `Aze`, `Ato`, and `Azo` through the implemented SPECTRE degree-of-freedom maps
 5. consume the returned energies, helicities, residuals, and histories
 
 See the full integration notes in [docs/integration.md](/Users/rogerio/local/beltrami_jax/docs/integration.md).
@@ -436,4 +446,4 @@ Read the Docs note:
 
 ## Project status
 
-This is an active build-out repository. The dense regression-tested kernel, diagnostics, benchmark tooling, and validation figures are in place, while the next steps are broader fixture coverage, richer integration APIs, and future alignment with public SPECTRE source.
+This is an active build-out repository. The dense regression-tested kernel, diagnostics, benchmark tooling, validation figures, SPECTRE IO, and exact coefficient pack/unpack maps are in place. The next steps are JAX-native SPECTRE geometry/integral assembly, full constraint parity, broader SPECTRE fixture coverage, and integration-oriented backend APIs.

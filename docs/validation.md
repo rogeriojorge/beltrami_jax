@@ -139,6 +139,9 @@ The test suite verifies:
 - `load_spectre_reference_h5` reads `vector_potential/Ate`, `Aze`, `Ato`, and `Azo` from SPECTRE reference files and transposes from SPECTRE HDF5 layout to radial-first Python layout.
 - `compare_vector_potentials` reports component-wise and global relative errors and max absolute coefficient differences.
 - `build_spectre_beltrami_layout_for_vector_potential` validates packed radial slices and identifies free-boundary exterior blocks from `Lrad`.
+- `build_spectre_dof_layout_for_vector_potential` reconstructs SPECTRE's internal `gi00ab` mode order, `lregion` branch flags, `Ate/Aze/Ato/Azo` coefficient id maps, and `Lma` through `Lmh` multiplier id maps.
+- Packaged SPECTRE vector potentials round-trip exactly through `pack_vector_potential` and `unpack_solutions`.
+- The JAX pack/unpack methods are covered by an autodiff test that differentiates through packed per-volume solution vectors.
 - `tools/export_spectre_vecpot_npz.py` runs from a SPECTRE environment and exports fresh coefficients from `spectre.get_vec_pot_flat`.
 - The four public SPECTRE compare cases are packaged under `src/beltrami_jax/data/spectre_compare/`.
 - `tools/generate_spectre_validation_assets.py --use-packaged` compares those packaged fresh exports against packaged SPECTRE `reference.h5` files and writes the committed parity figure.
@@ -150,6 +153,14 @@ Current public SPECTRE compare-case results:
 - `G3V3L3Fi`: global relative coefficient error `1.51e-14`
 - `G3V3L2Fi_stability`: global relative coefficient error `1.52e-14`
 - `G3V8L3Free`: global relative coefficient error `2.79e-15`
+
+Current SPECTRE pack/unpack checks:
+
+- SPECTRE Fourier modes match `gi00ab` ordering, including the field-period-scaled toroidal `in` array.
+- Positive coefficient and multiplier ids are unique and contiguous for every packed volume.
+- Coordinate-singularity axis recombination removes the same `Ate/Ato` rows for `(m,ll)=(0,0)` and `(m,ll)=(1,1)` that SPECTRE removes in `preset_mod.F90`.
+- Free-boundary exterior blocks are included in the packed layout.
+- Non-stellarator-symmetric synthetic metadata exercises odd `Ato/Azo` maps even though the current public SPECTRE fixtures are stellarator-symmetric.
 
 Programmatic access:
 
@@ -166,7 +177,7 @@ for label in list_packaged_spectre_cases():
 The repository enforces a coverage threshold in `pyproject.toml`:
 
 - required line coverage: at least 90%
-- current release-gate result: `44 passed` with `95.36%` line coverage
+- current release-gate result: `50 passed` with `94.01%` line coverage
 
 ## Known validation gaps
 
@@ -176,7 +187,6 @@ Remaining validation work includes:
 
 - comparisons against later SPECTRE integration points
 - JAX-native generation of SPECTRE HDF5 vector-potential coefficients `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`
-- exact SPECTRE pack/unpack parity from a JAX solution vector into those vector-potential coefficients
 - broader 3D fixture coverage closer to anticipated SPECTRE use cases
 - branch-specific parity checks once public SPECTRE source can be compared directly
 

@@ -120,6 +120,8 @@ Current supported use:
 - read SPECTRE HDF5 vector-potential coefficients
 - compare fresh SPECTRE coefficient exports against `reference.h5`
 - load packaged public SPECTRE compare cases for reproducible CI validation
+- reconstruct SPECTRE's internal Fourier mode order and packed radial block layout
+- pack and unpack SPECTRE-compatible per-volume solution vectors to/from `Ate`, `Aze`, `Ato`, and `Azo`
 - use the comparison tooling as the target contract for the future JAX-native backend
 
 Intended future use:
@@ -137,6 +139,8 @@ Current safe entry points:
 - `load_spectre_vector_potential_npz`
 - `compare_vector_potentials`
 - `build_spectre_beltrami_layout_for_vector_potential`
+- `build_spectre_dof_layout_for_vector_potential`
+- `spectre_fourier_modes`
 - `list_packaged_spectre_cases`
 - `load_packaged_spectre_case`
 
@@ -211,8 +215,38 @@ This is intentionally separated from the JAX-native assembly work. It validates
 the coefficient layout, HDF5 orientation, free-boundary update convention, and
 comparison metrics that the replacement backend must reproduce.
 
+## SPECTRE pack/unpack workflow
+
+SPECTRE stores one vector-potential coefficient array per component, but the
+Beltrami solve itself uses one solution vector per packed volume. The integer
+maps are built in SPECTRE's `preset_mod.F90` and used by `packab`. The
+corresponding `beltrami_jax` API is:
+
+```python
+from beltrami_jax import (
+    build_spectre_dof_layout_for_vector_potential,
+    load_packaged_spectre_case,
+)
+
+case = load_packaged_spectre_case("G3V3L3Fi")
+dof_layout = build_spectre_dof_layout_for_vector_potential(
+    case.input_summary,
+    case.reference.vector_potential,
+)
+solutions = dof_layout.pack_vector_potential(case.reference.vector_potential)
+roundtrip = dof_layout.unpack_solutions(solutions)
+print(dof_layout.solution_sizes)
+print(roundtrip.shape)
+```
+
+For differentiable coupling, use `pack_vector_potential_jax` and
+`unpack_solutions_jax` with dictionaries containing `ate`, `aze`, `ato`, and
+`azo` arrays. These methods use JAX scatter/gather operations, so scalar
+objectives downstream of the packed solution vectors remain compatible with
+`jax.grad`.
+
 ## Current boundary
 
-The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, and SPECTRE coefficient-validation models, but it is still not a full SPECTRE backend. The main remaining work is JAX-native SPECTRE interface-geometry assembly, exact SPECTRE pack/unpack from a JAX solution vector, and full branch-specific constraint logic.
+The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, and SPECTRE solution-vector packing models, but it is still not a full SPECTRE backend. The main remaining work is JAX-native SPECTRE interface-geometry assembly and full branch-specific constraint logic.
 
 See the root-level `SPECTRE_MIGRATION_PLAN.md` for the current SPECTRE replacement plan.

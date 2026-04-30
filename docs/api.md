@@ -34,6 +34,7 @@ The main implementation files are:
 - `src/beltrami_jax/spectre_input.py`
 - `src/beltrami_jax/spectre_io.py`
 - `src/beltrami_jax/spectre_layout.py`
+- `src/beltrami_jax/spectre_pack.py`
 - `src/beltrami_jax/spectre_validation.py`
 - `src/beltrami_jax/diagnostics.py`
 - `src/beltrami_jax/benchmark.py`
@@ -125,6 +126,13 @@ These are the files to read if you want to understand how the package maps geome
 
 ```{eval-rst}
 .. automodule:: beltrami_jax.spectre_layout
+   :members:
+```
+
+## SPECTRE solution-vector packing
+
+```{eval-rst}
+.. automodule:: beltrami_jax.spectre_pack
    :members:
 ```
 

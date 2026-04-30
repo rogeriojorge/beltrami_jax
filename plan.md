@@ -470,7 +470,7 @@ What does not exist yet:
 - hosted Read the Docs project configuration outside the repository
 - a live hosted docs deployment
 - JAX-native SPECTRE geometry assembly that produces `Ate/Aze/Ato/Azo` directly from SPECTRE TOML/interface geometry
-- exact SPECTRE pack/unpack from a JAX solution vector for all branch conventions
+- full SPECTRE constraint and derivative parity from JAX-native assembly
 
 Known resolved inconsistency:
 
@@ -765,9 +765,9 @@ Concrete near-term solver tasks:
 
 The next concrete tasks, in priority order, are:
 
-1. Implement exact SPECTRE pack/unpack from a JAX solution vector into `Ate/Aze/Ato/Azo`.
-2. Add SPECTRE debug/export hooks for Beltrami matrices, RHS, packed solution, and vector-potential arrays per volume.
-3. Port SPECTRE geometry assembly branch by branch, starting with one fixed-boundary stellarator-symmetric compare case.
+1. Add SPECTRE debug/export hooks for Beltrami matrices, RHS, packed solution, and vector-potential arrays per volume.
+2. Port SPECTRE geometry assembly branch by branch, starting with one fixed-boundary stellarator-symmetric compare case.
+3. Connect JAX-owned per-volume solution vectors to the implemented `spectre_pack` maps and compare `Ate/Aze/Ato/Azo` directly against packaged SPECTRE HDF5 coefficients.
 4. Add a SPECTRE fork/branch with an optional JAX Beltrami backend once one public compare case reaches coefficient parity.
 5. Expand parity to free-boundary, coordinate-singularity, and derivative/force-mode paths.
 6. Enable the hosted Read the Docs project and verify that the public docs URL stops returning `404`.
@@ -1318,10 +1318,9 @@ New planning document:
 
 Immediate next implementation lanes:
 
-- Fix README/docs to clarify current input modes, fixture role, HDF5 coefficient gap, and large-aspect-ratio wording.
-- Add SPECTRE HDF5 vector-potential readers to `beltrami_jax`.
-- Implement exact SPECTRE pack/unpack mapping for `Ate/Aze/Ato/Azo`.
-- Add tests and plots comparing `beltrami_jax` vector-potential coefficients to SPECTRE reference HDF5 files.
+- Add SPECTRE debug/export hooks for matrices, RHS, solution vectors, and vector-potential arrays per volume.
+- Port SPECTRE geometry/integral assembly for one fixed-boundary stellarator-symmetric compare case.
+- Add tests and plots comparing JAX-native `beltrami_jax` vector-potential coefficients to SPECTRE reference HDF5 files.
 - After design choices are confirmed, create a SPECTRE fork/branch with an optional JAX Beltrami backend.
 
 ### 2026-04-30: SPECTRE TOML/HDF5 validation implementation
@@ -1456,6 +1455,72 @@ Verification after adding the layout scaffold:
 - `./.venv/bin/python -m pytest`
   - `44 passed in 26.11s`
   - total coverage `95.36%`
+
+### 2026-04-30: SPECTRE `packab`-compatible degree-of-freedom maps
+
+Implemented:
+
+- Added `src/beltrami_jax/spectre_pack.py`.
+- Mirrored the SPECTRE/SPEC logic from:
+  - `numerical_mod.F90::gi00ab`
+  - `volume_mod.F90::lregion`
+  - `preset_mod.F90::initialize_internal_arrays`
+  - `packing_mod.F90::packab`
+- Added public helpers:
+  - `spectre_mode_count`
+  - `spectre_fourier_modes`
+  - `spectre_region_flags`
+  - `build_spectre_dof_layout`
+  - `build_spectre_dof_layout_for_vector_potential`
+- Added public dataclasses:
+  - `SpectreVolumeDofMap`
+  - `SpectreBeltramiDofLayout`
+- Implemented exact per-volume integer maps for:
+  - `Ate`
+  - `Aze`
+  - `Ato`
+  - `Azo`
+  - SPECTRE multipliers `Lma` through `Lmh`
+- Implemented NumPy pack/unpack:
+  - `pack_vector_potential`
+  - `unpack_solution`
+  - `unpack_solutions`
+- Implemented differentiable JAX pack/unpack:
+  - `pack_vector_potential_jax`
+  - `unpack_solution_jax`
+  - `unpack_solutions_jax`
+
+Validation added:
+
+- Added `tests/test_spectre_pack.py`.
+- Verified SPECTRE Fourier mode ordering matches `gi00ab`.
+- Verified all positive coefficient and multiplier ids are unique and contiguous.
+- Verified packaged SPECTRE vector potentials round-trip exactly through the maps.
+- Verified coordinate-singularity axis recombination removes the same rows as SPECTRE for `(m,ll)=(0,0)` and `(m,ll)=(1,1)`.
+- Verified the optional free-boundary exterior block is included through the existing `Lrad` layout.
+- Added a synthetic non-stellarator-symmetric test so odd `Ato/Azo` maps are exercised.
+- Added a JAX autodiff test through the packing operations.
+
+Documentation updates:
+
+- README now states that SPECTRE solution-vector pack/unpack maps are implemented.
+- `docs/api.md` includes `beltrami_jax.spectre_pack`.
+- `docs/integration.md` documents the SPECTRE pack/unpack workflow.
+- `docs/validation.md` records the pack/unpack validation criteria.
+- `docs/limitations.md` removes exact pack/unpack from the remaining-gaps list.
+- `SPECTRE_MIGRATION_PLAN.md` now marks the pack/unpack lane as complete.
+
+Verification after adding the `packab` maps:
+
+- `./.venv/bin/python -m pytest`
+  - `50 passed in 21.59s`
+  - total coverage `94.01%`
+
+Current interpretation:
+
+- SPECTRE coefficient IO and SPECTRE solution-vector layout are now represented directly in `beltrami_jax`.
+- The remaining SPECTRE replacement blocker is not coefficient packing; it is JAX-native assembly of the SPECTRE geometry-dependent matrices and complete branch-specific constraint logic.
+- The next implementation lane should inspect and port SPECTRE's geometry/matrix assembly path enough to produce the per-volume solution vectors that the new maps can unpack into HDF5-compatible coefficients.
 
 ## 19. Notes For Future Updates
 

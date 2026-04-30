@@ -114,6 +114,13 @@ Main entry points:
 
 ### SPECTRE
 
+Current supported use:
+
+- read and validate SPECTRE TOML input metadata
+- read SPECTRE HDF5 vector-potential coefficients
+- compare fresh SPECTRE coefficient exports against `reference.h5`
+- use the comparison tooling as the target contract for the future JAX-native backend
+
 Intended future use:
 
 - replace or simplify legacy Fortran-interface Beltrami solve components
@@ -124,7 +131,10 @@ Current safe entry points:
 
 - `BeltramiLinearSystem`
 - `solve_from_components`
-- future SPECTRE HDF5/vector-potential validation helpers
+- `load_spectre_input_toml`
+- `load_spectre_reference_h5`
+- `load_spectre_vector_potential_npz`
+- `compare_vector_potentials`
 
 Prototype-only entry points:
 
@@ -176,8 +186,29 @@ For file-based workflows, the package provides:
 
 These helpers are useful when one code prepares the problem and another code performs the solve or postprocessing.
 
+## SPECTRE coefficient-validation workflow
+
+Export fresh SPECTRE coefficients from the SPECTRE environment:
+
+```bash
+OMP_NUM_THREADS=1 DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib \
+  /Users/rogerio/local/spectre/.venv/bin/python tools/export_spectre_vecpot_npz.py \
+  /Users/rogerio/local/spectre/tests/compare/G2V32L1Fi/input.toml \
+  examples/_generated/spectre_vecpot_exports/G2V32L1Fi.npz
+```
+
+Compare and plot from the `beltrami_jax` environment:
+
+```bash
+PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_validation_assets.py
+```
+
+This is intentionally separated from the JAX-native assembly work. It validates
+the coefficient layout, HDF5 orientation, free-boundary update convention, and
+comparison metrics that the replacement backend must reproduce.
+
 ## Current boundary
 
-The integration boundary is strong enough to ship for the supported assembled-system and prototype internal-geometry models, but it is still not exact parity with all SPEC/SPECTRE branches. The main remaining work is direct SPECTRE HDF5 vector-potential parity, exact SPECTRE pack/unpack, SPECTRE interface-geometry assembly, and full branch-specific constraint logic.
+The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, and SPECTRE coefficient-validation models, but it is still not a full SPECTRE backend. The main remaining work is JAX-native SPECTRE interface-geometry assembly, exact SPECTRE pack/unpack from a JAX solution vector, and full branch-specific constraint logic.
 
 See the root-level `SPECTRE_MIGRATION_PLAN.md` for the current SPECTRE replacement plan.

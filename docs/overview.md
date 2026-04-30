@@ -59,6 +59,10 @@ The package currently provides:
   - loads raw text exports from a SPEC run
 - `load_packaged_reference`
   - loads a committed `.npz` regression fixture
+- `load_spectre_input_toml`
+  - loads SPECTRE TOML metadata into a normalized input summary
+- `load_spectre_reference_h5`, `compare_vector_potentials`
+  - load and compare SPECTRE HDF5 `Ate`, `Aze`, `Ato`, and `Azo` coefficient arrays
 - `save_problem_json`, `load_problem_json`, `save_nonlinear_solution`
   - handle user-facing input and output files for standalone workflows
 
@@ -103,7 +107,7 @@ This package now performs prototype internal geometry assembly, Krylov solves, a
 
 - every SPEC/SPECTRE branch and auxiliary matrix path
 - SPECTRE's exact interface-Fourier geometry input and integral assembly
-- direct HDF5 vector-potential coefficient parity against `Ate`, `Aze`, `Ato`, and `Azo`
+- JAX-native HDF5 vector-potential coefficient generation matching `Ate`, `Aze`, `Ato`, and `Azo`
 - full sparse production scaling
 - the broader equilibrium and constraint machinery beyond the supported Beltrami workflow
 

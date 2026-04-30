@@ -45,6 +45,10 @@ The repository now commits regenerated publication-style validation assets:
 
 ![Benchmark panel](_static/benchmark_panel.png)
 
+The SPECTRE-facing validation tools also generate a coefficient-level HDF5 parity panel:
+
+![SPECTRE vector-potential parity](_static/spectre_vecpot_parity.png)
+
 These figures summarize:
 
 - coefficient-level agreement between SPEC and `beltrami_jax`
@@ -53,6 +57,7 @@ These figures summarize:
 - autodiff agreement along a `mu` scan
 - steady-state dense solve timings
 - batched parameter-scan throughput
+- SPECTRE `Ate`, `Aze`, `Ato`, and `Azo` HDF5 coefficient parity for public SPECTRE compare cases
 
 Release-gate example outputs generated from the current source tree:
 
@@ -128,12 +133,27 @@ The test suite verifies:
 
 - all example scripts execute successfully and print progress messages
 
+### SPECTRE HDF5 coefficient validation
+
+- `load_spectre_input_toml` normalizes SPECTRE TOML metadata including geometry flags, resolution, `Lrad`, flux arrays, constraints, free-boundary options, and Fourier boundary tables.
+- `load_spectre_reference_h5` reads `vector_potential/Ate`, `Aze`, `Ato`, and `Azo` from SPECTRE reference files and transposes from SPECTRE HDF5 layout to radial-first Python layout.
+- `compare_vector_potentials` reports component-wise and global relative errors and max absolute coefficient differences.
+- `tools/export_spectre_vecpot_npz.py` runs from a SPECTRE environment and exports fresh coefficients from `spectre.get_vec_pot_flat`.
+- `tools/generate_spectre_validation_assets.py` compares those fresh exports against SPECTRE `reference.h5` files and writes the committed parity figure.
+
+Current public SPECTRE compare-case results:
+
+- `G2V32L1Fi`: global relative coefficient error `3.30e-15`
+- `G3V3L3Fi`: global relative coefficient error `1.51e-14`
+- `G3V3L2Fi_stability`: global relative coefficient error `1.52e-14`
+- `G3V8L3Free`: global relative coefficient error `2.79e-15`
+
 ## Coverage target
 
 The repository enforces a coverage threshold in `pyproject.toml`:
 
 - required line coverage: at least 90%
-- current release-gate result: `28 passed` with `96.10%` line coverage
+- current release-gate result: `37 passed` with `95.00%` line coverage
 
 ## Known validation gaps
 
@@ -142,8 +162,8 @@ The current validation is strong for the implemented regression and internal-wor
 Remaining validation work includes:
 
 - comparisons against later SPECTRE integration points
-- direct comparison against SPECTRE/SPEC HDF5 vector-potential coefficients `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`
-- exact SPECTRE pack/unpack parity for those vector-potential coefficients
+- JAX-native generation of SPECTRE HDF5 vector-potential coefficients `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`
+- exact SPECTRE pack/unpack parity from a JAX solution vector into those vector-potential coefficients
 - broader 3D fixture coverage closer to anticipated SPECTRE use cases
 - branch-specific parity checks once public SPECTRE source can be compared directly
 

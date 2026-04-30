@@ -22,6 +22,17 @@ from .operators import (
 )
 from .reference import list_packaged_references, load_packaged_reference, load_spec_text_dump
 from .solver import solve_from_components, solve_operator, solve_parameter_scan
+from .spectre_input import SpectreInputSummary, load_spectre_input_toml
+from .spectre_io import (
+    SpectreH5Reference,
+    SpectreVectorPotential,
+    SpectreVectorPotentialComparison,
+    compare_vector_potentials,
+    load_spectre_reference_h5,
+    load_spectre_vector_potential_h5,
+    load_spectre_vector_potential_npz,
+    save_spectre_vector_potential_npz,
+)
 from .types import (
     BeltramiProblem,
     BeltramiLinearSystem,
@@ -52,6 +63,10 @@ __all__ = [
     "SolveDiagnostics",
     "SolveResult",
     "SpecLinearSystemReference",
+    "SpectreH5Reference",
+    "SpectreInputSummary",
+    "SpectreVectorPotential",
+    "SpectreVectorPotentialComparison",
     "assemble_fourier_beltrami_system",
     "assemble_operator",
     "assemble_rhs",
@@ -61,12 +76,17 @@ __all__ = [
     "build_fourier_mode_basis",
     "collocation_grid",
     "compare_against_reference",
+    "compare_vector_potentials",
     "compute_solve_diagnostics",
     "gmres_solve",
     "list_packaged_references",
     "load_problem_json",
     "load_packaged_reference",
     "load_saved_solution",
+    "load_spectre_reference_h5",
+    "load_spectre_input_toml",
+    "load_spectre_vector_potential_h5",
+    "load_spectre_vector_potential_npz",
     "load_spec_text_dump",
     "magnetic_energy",
     "magnetic_helicity",
@@ -75,6 +95,7 @@ __all__ = [
     "residual_norm",
     "save_nonlinear_solution",
     "save_problem_json",
+    "save_spectre_vector_potential_npz",
     "shift_mu",
     "solve_helicity_constrained_equilibrium",
     "solve_from_components",

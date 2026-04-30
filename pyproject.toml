@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Differentiable JAX Beltrami linear solver port aligned with SPEC/SPECTRE-style workflows."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
   { name = "Rogerio Jorge" }
 ]
@@ -16,7 +16,6 @@ keywords = ["jax", "plasma", "mhd", "stellarator", "tokamak", "beltrami", "spec"
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
@@ -34,12 +33,20 @@ docs = [
   "myst-parser",
   "sphinx",
 ]
+validation = [
+  "h5py",
+  "matplotlib",
+  "numpy",
+  "tomli",
+]
 dev = [
   "build",
+  "h5py",
   "matplotlib",
   "numpy",
   "pytest",
   "pytest-cov",
+  "tomli",
   "furo",
   "myst-parser",
   "sphinx",

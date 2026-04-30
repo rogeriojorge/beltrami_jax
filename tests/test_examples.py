@@ -15,6 +15,7 @@ def test_examples_run() -> None:
         ROOT / "examples" / "parameter_scan.py",
         ROOT / "examples" / "autodiff_mu.py",
         ROOT / "examples" / "benchmark_fixtures.py",
+        ROOT / "examples" / "validate_spectre_vector_potential.py",
     ]
     for script in scripts:
         completed = subprocess.run([str(PYTHON), str(script)], cwd=ROOT, check=True, capture_output=True, text=True)

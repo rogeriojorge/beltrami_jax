@@ -10,7 +10,7 @@ $$
 \mathbf{M} = \mathbf{A} - \mu \mathbf{D},
 $$
 
-and now supports both dumped-SPEC regression and an internal geometry-driven path that assembles the system, updates `mu`, and postprocesses the solution.
+and now supports dumped-SPEC regression, an internal prototype geometry-driven path, and SPECTRE TOML/HDF5 validation utilities.
 
 ```{toctree}
 :maxdepth: 2
@@ -28,10 +28,10 @@ references
 
 ## Scope
 
-The repository currently covers the supported Beltrami workflow:
+The repository currently covers the supported Beltrami workflow components:
 
 - typed system representation
-- internal Fourier geometry assembly
+- internal prototype Fourier geometry assembly
 - operator and right-hand-side assembly
 - dense and GMRES solves
 - a helicity-constrained outer update for `mu`
@@ -39,8 +39,10 @@ The repository currently covers the supported Beltrami workflow:
 - vectorized parameter scans
 - autodifferentiation through solved states
 - regression testing against SPEC fixtures
+- SPECTRE TOML input summaries
+- SPECTRE HDF5 vector-potential coefficient loading and comparison
 
-It does not yet include all of SPEC or all SPECTRE-specific integration details.
+It does not yet include all of SPEC or a full JAX-native SPECTRE Beltrami backend.
 
 ## Quick links
 

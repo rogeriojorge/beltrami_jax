@@ -444,6 +444,10 @@ What exists:
 - local Sphinx build validated with warnings treated as errors
 - fixture support for both plasma and vacuum-region RHS reconstruction
 - committed publication-style validation and benchmark panels under `docs/_static/`
+- SPECTRE TOML input-summary loader in `src/beltrami_jax/spectre_input.py`
+- SPECTRE HDF5/NPZ vector-potential IO and comparison helpers in `src/beltrami_jax/spectre_io.py`
+- SPECTRE coefficient export and parity plotting tools
+- committed SPECTRE vector-potential parity panel under `docs/_static/spectre_vecpot_parity.png`
 
 Currently packaged fixtures:
 
@@ -464,6 +468,8 @@ What does not exist yet:
 
 - hosted Read the Docs project configuration outside the repository
 - a live hosted docs deployment
+- JAX-native SPECTRE geometry assembly that produces `Ate/Aze/Ato/Azo` directly from SPECTRE TOML/interface geometry
+- exact SPECTRE pack/unpack from a JAX solution vector for all branch conventions
 
 Known resolved inconsistency:
 
@@ -515,6 +521,10 @@ Source package:
   - timing helpers for dense solves and batched scans
 - `src/beltrami_jax/reference.py`
   - SPEC fixture loading
+- `src/beltrami_jax/spectre_input.py`
+  - SPECTRE TOML metadata loading and normalization
+- `src/beltrami_jax/spectre_io.py`
+  - SPECTRE HDF5 vector-potential loading, NPZ exchange, and coefficient comparisons
 - `src/beltrami_jax/data/`
   - packaged `.npz` reference data and package marker for `importlib.resources`
 
@@ -750,12 +760,14 @@ Concrete near-term solver tasks:
 
 The next concrete tasks, in priority order, are:
 
-1. Enable the hosted Read the Docs project and verify that the public docs URL stops returning `404`.
-2. Add at least one more shaped 3D plasma fixture from SPEC, ideally one closer to the future SPECTRE target cases.
-3. Add a higher-level public solve function oriented toward downstream integration instead of only raw system objects.
-4. Broaden the benchmark set beyond the current dense fixture panels, especially if larger systems are added.
-5. Add synthetic analytic tests that do not rely on dumped SPEC data.
-6. Keep `plan.md` and the repository in sync as new work lands.
+1. Implement exact SPECTRE pack/unpack from a JAX solution vector into `Ate/Aze/Ato/Azo`.
+2. Add SPECTRE debug/export hooks for Beltrami matrices, RHS, packed solution, and vector-potential arrays per volume.
+3. Port SPECTRE geometry assembly branch by branch, starting with one fixed-boundary stellarator-symmetric compare case.
+4. Add a SPECTRE fork/branch with an optional JAX Beltrami backend once one public compare case reaches coefficient parity.
+5. Expand parity to free-boundary, coordinate-singularity, and derivative/force-mode paths.
+6. Enable the hosted Read the Docs project and verify that the public docs URL stops returning `404`.
+7. Add broader shaped 3D plasma fixtures and synthetic analytic tests.
+8. Keep `plan.md` and the repository in sync as new work lands.
 
 ## 16. Open Gaps and Risks
 
@@ -764,6 +776,8 @@ Open gaps:
 - hosted docs are not yet live; `https://beltrami-jax.readthedocs.io/` returned `404` when checked on `2026-04-17`
 - fixture coverage is still narrow relative to the full SPEC branch space
 - no QA/QH or SPECTRE-like shaping cases are yet packaged
+- SPECTRE coefficient IO parity exists, but JAX-native SPECTRE coefficient generation does not yet exist
+- the public SPECTRE free-boundary input can use `Lrad` arrays of length `nvol + 1`, so SPECTRE-facing code must not assume one radial block per plasma volume
 
 Technical risks:
 
@@ -782,6 +796,7 @@ Current honest status:
 - the linear solve kernel, diagnostics helpers, benchmark helpers, and validation figures are implemented and regression-tested against multiple dumped SPEC systems
 - the repository now also includes internal geometry assembly, GMRES, an outer helicity-constrained solve, standalone workflow examples, docs sources, figures, benchmark assets, and CI definitions
 - exact parity with all SPEC/SPECTRE branches is still future work
+- SPECTRE TOML/HDF5 validation utilities now work and show fresh SPECTRE export parity with worst global relative vector-potential coefficient error `1.52e-14`
 
 ## 17. Restart From Scratch Checklist
 
@@ -1303,6 +1318,89 @@ Immediate next implementation lanes:
 - Implement exact SPECTRE pack/unpack mapping for `Ate/Aze/Ato/Azo`.
 - Add tests and plots comparing `beltrami_jax` vector-potential coefficients to SPECTRE reference HDF5 files.
 - After design choices are confirmed, create a SPECTRE fork/branch with an optional JAX Beltrami backend.
+
+### 2026-04-30: SPECTRE TOML/HDF5 validation implementation
+
+Implemented:
+
+- Added `src/beltrami_jax/spectre_input.py`.
+  - Loads SPECTRE TOML files with `tomllib` on Python `3.11+` and optional `tomli` on Python `3.10`.
+  - Normalizes SPECTRE Fourier boundary table keys like `"(1, 0)"` to `(1, 0)`.
+  - Exposes `nvol`, `nfp`, `igeometry`, `mpol`, `ntor`, `lrad`, `radial_size`, `packed_volume_count`, free-boundary flags, fluxes, and constraint summaries.
+  - Allows `Lrad` length `nvol + 1` for free-boundary cases after discovering `G3V8L3Free` uses an extra packed exterior/vacuum block.
+- Added `src/beltrami_jax/spectre_io.py`.
+  - Defines `SpectreVectorPotential`, `SpectreH5Reference`, and `SpectreVectorPotentialComparison`.
+  - Reads SPECTRE HDF5 datasets `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`.
+  - Transposes from SPECTRE HDF5 layout `(mn, radial_size)` to Python/SPECTRE-wrapper layout `(radial_size, mn)`.
+  - Saves and loads vector-potential `.npz` exchange files.
+  - Compares component-wise relative errors, component max absolute errors, global relative error, and global max absolute error.
+- Added tests:
+  - `tests/test_spectre_input.py`
+  - `tests/test_spectre_io.py`
+- Added SPECTRE validation tools:
+  - `tools/export_spectre_vecpot_npz.py`
+  - `tools/generate_spectre_validation_assets.py`
+- Added example:
+  - `examples/validate_spectre_vector_potential.py`
+  - It uses real local SPECTRE files when present and falls back to a synthetic SPECTRE-layout HDF5 file when SPECTRE is absent.
+- Updated README and docs:
+  - clarified input modes
+  - documented SPECTRE TOML/HDF5 utilities
+  - added the SPECTRE vector-potential parity figure
+  - replaced the old "HDF5 comparison not implemented" wording with the correct current boundary: HDF5 IO parity exists, JAX-native SPECTRE coefficient generation remains.
+
+SPECTRE export commands used:
+
+```bash
+cd /Users/rogerio/local/beltrami_jax
+mkdir -p examples/_generated/spectre_vecpot_exports
+for case in G2V32L1Fi G3V3L3Fi G3V3L2Fi_stability G3V8L3Free; do
+  OMP_NUM_THREADS=1 DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib \
+    /Users/rogerio/local/spectre/.venv/bin/python tools/export_spectre_vecpot_npz.py \
+    /Users/rogerio/local/spectre/tests/compare/${case}/input.toml \
+    examples/_generated/spectre_vecpot_exports/${case}.npz
+done
+```
+
+Important fix:
+
+- The free-boundary case initially showed a large mismatch when the exporter used the wrong number of `update_bnorm` iterations.
+- Matching SPECTRE's `tests/compare/test_compare_to_spec.py` requires using `test.input_list_mod.mfreeits`.
+- `tools/export_spectre_vecpot_npz.py` now defaults to that value for free-boundary cases.
+
+Generated reviewer-facing plot:
+
+```bash
+PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_validation_assets.py
+```
+
+Output:
+
+- `docs/_static/spectre_vecpot_parity.png`
+- `docs/_static/spectre_vecpot_parity_summary.json`
+
+SPECTRE HDF5 vector-potential parity results:
+
+- `G2V32L1Fi`: global relative coefficient error `3.296e-15`, max abs `6.384e-16`
+- `G3V3L3Fi`: global relative coefficient error `1.513e-14`, max abs `9.784e-16`
+- `G3V3L2Fi_stability`: global relative coefficient error `1.517e-14`, max abs `1.006e-15`
+- `G3V8L3Free`: global relative coefficient error `2.791e-15`, max abs `4.441e-16`
+
+Verification after this implementation:
+
+- `./.venv/bin/python -m pytest`
+  - `37 passed in 19.71s`
+  - total coverage `95.00%`
+- `./.venv/bin/python -m sphinx -b html -W docs docs/_build/html`
+  - build succeeded
+- `rm -rf dist build && ./.venv/bin/python -m build`
+  - source distribution and wheel built successfully with modern SPDX `license = "MIT"` metadata
+
+Current interpretation:
+
+- This validates the SPECTRE-facing coefficient layout, HDF5 orientation, free-boundary update convention, and comparison metrics.
+- It does not yet validate a JAX-native SPECTRE Beltrami solve, because the fresh candidate coefficients are exported by SPECTRE itself.
+- The next research-grade milestone is to make `beltrami_jax` generate those coefficients directly from SPECTRE TOML/interface geometry.
 
 ## 19. Notes For Future Updates
 

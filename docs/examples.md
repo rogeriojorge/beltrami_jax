@@ -87,12 +87,39 @@ Committed figure:
 
 ![Vacuum GMRES benchmark](_static/vacuum_gmres_panel.png)
 
+## Validate SPECTRE vector-potential coefficients
+
+Run:
+
+```bash
+./.venv/bin/python examples/validate_spectre_vector_potential.py
+```
+
+This example:
+
+- reads SPECTRE TOML metadata with `load_spectre_input_toml`
+- loads SPECTRE HDF5 vector-potential datasets with `load_spectre_reference_h5`
+- loads fresh exported SPECTRE coefficients from `.npz` files when they are present
+- compares `Ate`, `Aze`, `Ato`, and `Azo` with `compare_vector_potentials`
+- falls back to a synthetic SPECTRE-layout HDF5 file when SPECTRE is not installed locally
+- writes a JSON summary and a compact validation figure under `examples/_generated/validate_spectre_vector_potential/`
+
+Committed SPECTRE parity figure:
+
+![SPECTRE vector-potential parity](_static/spectre_vecpot_parity.png)
+
 ## Regenerate the committed validation panels
 
 The repository-level validation and benchmark figures are built from the packaged fixtures with:
 
 ```bash
 PYTHONPATH=src ./.venv/bin/python tools/generate_validation_assets.py --repeats 2
+```
+
+The SPECTRE HDF5 coefficient parity figure is built with:
+
+```bash
+PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_validation_assets.py
 ```
 
 ## Example usage from Python

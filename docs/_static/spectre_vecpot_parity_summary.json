@@ -1,0 +1,98 @@
+[
+  {
+    "case": "G2V32L1Fi",
+    "candidate": "examples/_generated/spectre_vecpot_exports/G2V32L1Fi.npz",
+    "reference": "/Users/rogerio/local/spectre/tests/compare/G2V32L1Fi/reference.h5",
+    "label": "G2V32L1Fi",
+    "shape": [
+      56,
+      8
+    ],
+    "component_relative_errors": {
+      "ate": 1.270447048607005e-15,
+      "aze": 4.695714607728456e-15,
+      "ato": 0.0,
+      "azo": 0.0
+    },
+    "component_max_abs_errors": {
+      "ate": 1.551414401200865e-16,
+      "aze": 6.38378239159465e-16,
+      "ato": 0.0,
+      "azo": 0.0
+    },
+    "global_relative_error": 3.295793623232588e-15,
+    "global_max_abs_error": 6.38378239159465e-16
+  },
+  {
+    "case": "G3V3L3Fi",
+    "candidate": "examples/_generated/spectre_vecpot_exports/G3V3L3Fi.npz",
+    "reference": "/Users/rogerio/local/spectre/tests/compare/G3V3L3Fi/reference.h5",
+    "label": "G3V3L3Fi",
+    "shape": [
+      19,
+      23
+    ],
+    "component_relative_errors": {
+      "ate": 5.6789691307880265e-15,
+      "aze": 4.826167041489495e-14,
+      "ato": 0.0,
+      "azo": 0.0
+    },
+    "component_max_abs_errors": {
+      "ate": 5.022024462952857e-16,
+      "aze": 9.783817287024426e-16,
+      "ato": 0.0,
+      "azo": 0.0
+    },
+    "global_relative_error": 1.5132511558622693e-14,
+    "global_max_abs_error": 9.783817287024426e-16
+  },
+  {
+    "case": "G3V3L2Fi_stability",
+    "candidate": "examples/_generated/spectre_vecpot_exports/G3V3L2Fi_stability.npz",
+    "reference": "/Users/rogerio/local/spectre/tests/compare/G3V3L2Fi_stability/reference.h5",
+    "label": "G3V3L2Fi_stability",
+    "shape": [
+      19,
+      23
+    ],
+    "component_relative_errors": {
+      "ate": 5.686691150665481e-15,
+      "aze": 5.065618707362252e-14,
+      "ato": 0.0,
+      "azo": 0.0
+    },
+    "component_max_abs_errors": {
+      "ate": 5.039371697712625e-16,
+      "aze": 1.00598265027351e-15,
+      "ato": 0.0,
+      "azo": 0.0
+    },
+    "global_relative_error": 1.5171899393677253e-14,
+    "global_max_abs_error": 1.00598265027351e-15
+  },
+  {
+    "case": "G3V8L3Free",
+    "candidate": "examples/_generated/spectre_vecpot_exports/G3V8L3Free.npz",
+    "reference": "/Users/rogerio/local/spectre/tests/compare/G3V8L3Free/reference.h5",
+    "label": "G3V8L3Free",
+    "shape": [
+      68,
+      5
+    ],
+    "component_relative_errors": {
+      "ate": 2.7788276563269168e-15,
+      "aze": 3.1976435719220976e-15,
+      "ato": 0.0,
+      "azo": 0.0
+    },
+    "component_max_abs_errors": {
+      "ate": 4.440892098500626e-16,
+      "aze": 8.326672684688674e-17,
+      "ato": 0.0,
+      "azo": 0.0
+    },
+    "global_relative_error": 2.7908693564992132e-15,
+    "global_max_abs_error": 4.440892098500626e-16
+  }
+]

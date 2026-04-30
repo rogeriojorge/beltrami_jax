@@ -16,13 +16,15 @@ What currently works:
 - It supports plasma and vacuum RHS branches using `d_ma`, `d_md`, `d_mb`, and optional `d_mg`.
 - It has packaged fixtures from instrumented SPEC text dumps and verifies operator, RHS, and packed-solution agreement for those dumped systems.
 - It has an internal geometry-driven prototype with a shaped large-aspect-ratio torus, basis construction, dense/GMRES solves, simple helicity-target iteration, examples, plots, docs, CI, and coverage.
+- It now reads SPECTRE TOML input summaries and SPECTRE HDF5 vector-potential coefficients.
+- It now compares fresh SPECTRE `get_vec_pot_flat` exports against public SPECTRE `reference.h5` files and generates a reviewer-facing parity figure.
 
 What is not yet done:
 
-- It does not yet accept the same user-facing input as SPECTRE, namely a TOML configuration or interface Fourier geometry with SPECTRE's exact basis, packing, constraints, and branch logic.
-- It does not yet reproduce SPECTRE/SPEC HDF5 vector-potential coefficient datasets `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`.
+- It does not yet solve directly from the same user-facing input as SPECTRE, namely a TOML configuration or interface Fourier geometry with SPECTRE's exact basis, packing, constraints, and branch logic.
+- It does not yet make the JAX-native solver produce SPECTRE/SPEC HDF5 vector-potential coefficient datasets `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`.
 - It does not yet implement SPECTRE's full geometry integral assembly, packing rules, coordinate-singularity handling, non-stellarator-symmetric branches, free-boundary details, or constraint logic in JAX.
-- The current docs can be read as claiming more SPECTRE readiness than exists. They must be rewritten so fixtures are presented as developer validation assets and the current geometry mode is presented as a prototype, not as arbitrary 3D SPECTRE geometry.
+- The docs have been tightened, but must continue to avoid claiming SPECTRE backend replacement before JAX-native coefficient parity exists.
 
 Recommended immediate direction:
 
@@ -57,9 +59,10 @@ Final target input contract:
 
 Current `beltrami_jax` answer:
 
-- No, not directly yet.
-- Current `beltrami_jax` validation compares to dense linear systems dumped from an instrumented local SPEC build: operator, RHS, and packed solution vector.
-- This is useful but not enough for SPECTRE integration. The collaborator is right that `Ate`, `Aze`, `Ato`, and `Azo` in `.h5` should match up to numerical resolution and packing conventions.
+- Yes for the SPECTRE IO/validation contract; not yet for a JAX-native SPECTRE backend.
+- `beltrami_jax` now loads SPECTRE `reference.h5` vector-potential datasets and compares them to fresh SPECTRE exports from `spectre.get_vec_pot_flat`.
+- The JAX-native internal solver still needs exact SPECTRE geometry assembly and pack/unpack before it can produce those HDF5 coefficients directly.
+- Existing dense validation still compares to linear systems dumped from an instrumented local SPEC build: operator, RHS, and packed solution vector.
 
 SPECTRE assessment:
 
@@ -84,12 +87,19 @@ Manual SPECTRE validation run on 2026-04-30:
   - `G3V8L3Free` free-boundary tokamak: `Ate 2.78e-15`, `Aze 3.20e-15`, `Ato 0`, `Azo 0`.
 - Force-mode relative errors in the same manual checks were `1.1e-13` to `3.2e-12`.
 
-Required `beltrami_jax` work:
+Completed `beltrami_jax` work:
 
-- Add HDF5 readers for SPECTRE/SPEC reference files.
-- Add vector-potential coefficient containers.
+- Added `src/beltrami_jax/spectre_io.py` with HDF5/NPZ loaders and vector-potential comparison diagnostics.
+- Added `src/beltrami_jax/spectre_input.py` with SPECTRE TOML summaries for geometry, resolution, flux, constraints, free-boundary settings, and boundary Fourier tables.
+- Added tests for the SPECTRE TOML and HDF5 IO layers.
+- Added `examples/validate_spectre_vector_potential.py`.
+- Added `tools/export_spectre_vecpot_npz.py` and `tools/generate_spectre_validation_assets.py`.
+- Generated `docs/_static/spectre_vecpot_parity.png`, showing worst global relative coefficient error `1.52e-14` across four public SPECTRE compare cases.
+
+Required remaining `beltrami_jax` work:
+
 - Add exact pack/unpack mapping between packed JAX solution vectors and `Ate/Aze/Ato/Azo`.
-- Add tests that compare `beltrami_jax` vector-potential coefficients to SPECTRE/SPEC `.h5` datasets.
+- Add tests that compare JAX-native vector-potential coefficients to SPECTRE/SPEC `.h5` datasets.
 
 ### 2.3 Does "large aspect-ratio" mean only large-aspect-ratio tokamaks?
 
@@ -179,8 +189,8 @@ Current test files:
 
 Current gap:
 
-- No test compares `beltrami_jax` output against SPECTRE/SPEC HDF5 vector-potential coefficients.
-- No test exercises SPECTRE TOML input as the user-facing input.
+- Tests now cover SPECTRE TOML summaries and SPECTRE HDF5 vector-potential IO/comparison.
+- No test yet compares JAX-native SPECTRE-geometry output against SPECTRE/SPEC HDF5 vector-potential coefficients.
 - No test validates exact SPECTRE packing/unpacking of `Ate/Aze/Ato/Azo`.
 
 ### 3.4 Examples
@@ -195,12 +205,13 @@ Current examples:
   - Demonstrates autodiff through solved energy with respect to `mu`.
 - `examples/benchmark_fixtures.py`
   - Demonstrates vacuum/GMRES workflow and benchmarking.
+- `examples/validate_spectre_vector_potential.py`
+  - Demonstrates SPECTRE TOML summary loading, SPECTRE HDF5 coefficient loading, coefficient comparison, JSON output, and figure generation.
 
 Current gap:
 
-- Examples teach the current package API, but not the final SPECTRE-facing workflow.
-- Add examples that start from SPECTRE TOML or SPECTRE `.h5` files:
-  - `examples/spectre_h5_vecpot_validation.py`
+- Examples now teach the current SPECTRE-facing IO/validation workflow.
+- Add examples once JAX-native SPECTRE assembly exists:
   - `examples/spectre_toml_field_solve.py`
   - `examples/spectre_backend_dropin.py`
 
@@ -792,16 +803,13 @@ Consequences:
 
 ## 8. Immediate Next Tasks
 
-1. Rewrite README and docs to answer the collaborator's three questions explicitly.
-2. Add `spectre_io.py` to load `Ate/Aze/Ato/Azo` from SPECTRE HDF5 files.
-3. Add `SpectreVectorPotential` dataclass and comparison diagnostics.
-4. Add tests using a small copied/extracted HDF5 reference fixture or generated miniature HDF5.
-5. Implement SPECTRE flattening/unflattening conventions.
-6. Add an example script that loads a SPECTRE reference HDF5 and produces coefficient validation plots.
-7. Create a SPECTRE fork/branch after design decisions are confirmed.
-8. Add SPECTRE wrapper functions to export Beltrami matrices, RHS, packed solution, and vector-potential arrays.
-9. Add `beltrami_jax` tests that compare against SPECTRE-exported cases.
-10. Start JAX port of SPECTRE assembly branch by branch.
+1. Implement SPECTRE flattening/unflattening conventions from a JAX solution vector into `Ate/Aze/Ato/Azo`.
+2. Add SPECTRE wrapper functions or debug exports for Beltrami matrices, RHS, packed solution, and vector-potential arrays from each volume.
+3. Add `beltrami_jax` tests that compare JAX-native pack/unpack against SPECTRE-exported cases.
+4. Start JAX port of SPECTRE geometry assembly branch by branch, beginning with one fixed-boundary stellarator-symmetric case.
+5. Add a SPECTRE fork/branch with a backend switch once the JAX path passes one coefficient-parity case.
+6. Expand to free-boundary and coordinate-singularity cases.
+7. Add force-mode and derivative parity after coefficient parity is stable.
 
 ## 9. Open Risks
 
@@ -809,7 +817,7 @@ Consequences:
 - The current internal geometry assembly may distract from the real SPECTRE target if docs are not clarified.
 - SPECTRE's force and derivative path uses Beltrami derivatives, not only the base coefficient vector.
 - Local SPECTRE build required patches on macOS with Python 3.13, Pydantic 2.13, and gfortran 15; this should be separated from Beltrami backend work.
-- `beltrami_jax` currently avoids hard dependencies beyond `jax`; HDF5 validation needs optional dependencies.
+- `beltrami_jax` currently avoids hard runtime dependencies beyond `jax`; SPECTRE validation uses optional `h5py`, `tomli`, `matplotlib`, and `numpy` extras.
 - Machine precision validation requires matching not just equations, but coefficient ordering, symmetry conventions, radial basis conventions, and branch-specific zeroing rules.
 
 ## 10. Current Local State
@@ -850,9 +858,9 @@ The honest technical response should be:
 ```text
 Thanks, those are the right questions.
 
-At the moment beltrami_jax has two paths. The fixture path is a developer validation path where SPEC/SPECTRE-style matrices are already assembled and loaded, and the JAX code solves the packed Beltrami system. The geometry-driven path currently in the repository is a prototype shaped-torus assembly, not yet the full SPECTRE geometry path. The target is to make the user-facing input SPECTRE-like: interface geometry, resolution, flux/current/helicity constraints, and branch flags, not prebuilt fixtures.
+At the moment beltrami_jax has three paths. The fixture path is a developer validation path where SPEC/SPECTRE-style matrices are already assembled and loaded, and the JAX code solves the packed Beltrami system. The geometry-driven path currently in the repository is a prototype shaped-torus assembly, not yet the full SPECTRE geometry path. The SPECTRE-facing validation path now reads SPECTRE TOML metadata and HDF5 vector-potential coefficients. The target is to make the actual solve input SPECTRE-like: interface geometry, resolution, flux/current/helicity constraints, and branch flags, not prebuilt fixtures.
 
-You are also right about vector-potential coefficients. The current beltrami_jax validation checks dumped matrices, RHS, and packed solutions, but it does not yet directly compare HDF5 vector_potential/Ate, Aze, Ato, Azo. I checked the released SPECTRE tests and they already provide exactly that reference path. I am adding HDF5 vector-potential readers and pack/unpack parity tests so beltrami_jax will compare directly against those datasets.
+You are also right about vector-potential coefficients. I checked the released SPECTRE tests and they already provide exactly that reference path. beltrami_jax now loads those HDF5 vector_potential/Ate, Aze, Ato, Azo datasets and compares them against fresh SPECTRE exports. Across the four public SPECTRE compare cases the worst global relative coefficient error is 1.52e-14. The remaining work is to make the JAX-native SPECTRE geometry assembly produce those coefficients directly, rather than using SPECTRE as the exporter.
 
 Finally, "large aspect-ratio" only describes the current internal prototype geometry. It should not be read as the final scope. For SPECTRE integration, the goal is any geometry representable by SPECTRE's Fourier interface model and supported branch set. I will clarify the docs so this distinction is explicit.
 ```

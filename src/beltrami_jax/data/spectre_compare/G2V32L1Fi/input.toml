@@ -1,0 +1,142 @@
+[physics]
+igeometry = 2
+nfp = 1
+nvol = 4
+mpol = 2
+ntor = 1
+lconstraint = 1
+mupfits = 32
+ladiabatic = 0
+mupftol = 1e-16
+rpol = 1.0
+rtor = 1.0
+lreflect = 0
+lfreebound = 0
+phiedge = 2.8452
+curtor = 0.0
+curpol = 0.0
+gamma = 0.0
+pscale = 1.0
+enforce_stell_sym = true
+lrad = [16, 12, 12, 12]
+pl = [0, 0, 0, 0]
+ql = [0, 0, 0, 0]
+pr = [0, 0, 0, 0]
+qr = [0, 0, 0, 0]
+lp = [0, 0, 0, 0]
+lq = [0, 0, 0, 0]
+rp = [0, 0, 0, 0]
+rq = [0, 0, 0, 0]
+tflux = [0.003066529430149859, 0.01225025618766928, 0.02750637711080902, 0.04876797314546707]
+pflux = [0.003004109315249754, 0.01176278047473363, 0.0259008359134833, 0.04505485867731018]
+pressure = [0.09995789827789431, 0.09992969624297245, 0.09988323439927634, 0.09980672798381474]
+adiabatic = [0.0, 0.0, 0.0, 0.0]
+mu = [1.909266635984867, 1.821661339923866, 1.738360192598558, 1.659417421725912]
+ivolume = [0.0, 0.0, 0.0, 0.0]
+iota = [0.9696969696969446, 0.9696969696969446, 0.9411764705881904, 0.9142857142856815, 0.8888888888888822]
+oita = [0.9696969696969446, 0.9696969696969446, 0.9411764705881904, 0.9142857142856815, 0.8888888888888822]
+isurf = [0.0, 0.0, 0.0, 0.0]
+helicity = [-0.18, -0.18, -0.18, -0.18]
+rac = [-1.0, 0.0]
+zas = [0.0, 0.0]
+ras = [0.0, 0.0]
+zac = [0.0, 0.0]
+
+[physics.rbc]
+"(0, 0)" = 1.0
+
+[physics.zbs]
+
+[physics.rbs]
+
+[physics.zbc]
+
+[physics.rwc]
+
+[physics.zws]
+
+[physics.rws]
+
+[physics.zwc]
+
+[physics.vns]
+
+[physics.bns]
+
+[physics.vnc]
+
+[physics.bnc]
+
+[physics.allrzrz]
+
+[numeric]
+linitialize = 1
+lautoinitbn = 1
+lzerovac = 0
+ndiscrete = 2
+nquad = -1
+impol = -4
+intor = -4
+lsparse = 0
+lsvdiota = 0
+imethod = 3
+iorder = 2
+iprecon = 1
+iotatol = -1.0
+mregular = -1
+lrzaxis = 1
+ntoraxis = 3
+lvcgrid = 0
+
+[local]
+linitgues = 1
+lposdef = 0
+maxrndgues = 1.0
+
+[diagnostics]
+odetol = 1e-07
+absreq = 1e-08
+relreq = 1e-08
+absacc = 0.0001
+epsr = 1e-08
+nppts = 0
+ppts = 0.0
+nptrj = [10, 10, 10, 10]
+lhevalues = false
+lhevectors = false
+lhmatrix = false
+dpp = -1
+dqq = -1
+lerrortype = 0
+ngrid = -1
+drz = 1e-05
+lcheck = 7
+ltiming = false
+ltransform = false
+fudge = 1.0
+scaling = 1.0
+
+[global]
+lfindzero = 0
+escale = 0.0
+opsilon = 1.0
+pcondense = 2.0
+epsilon = 0.0
+wpoloidal = 1.0
+upsilon = 1.0
+forcetol = 1e-12
+c05xmax = 1e-06
+c05xtol = 1e-10
+c05factor = 0.01
+lreadgf = false
+mfreeits = 0
+bnstol = 1e-06
+bnsblend = 0.666
+gbntol = 1e-06
+gbnbld = 0.666
+vcasingeps = 1e-12
+vcasingtol = 1e-08
+vcasingits = 8
+vcasingper = 1
+vcnt = 256
+vcnz = 256

@@ -33,6 +33,13 @@ from .spectre_io import (
     load_spectre_vector_potential_npz,
     save_spectre_vector_potential_npz,
 )
+from .spectre_validation import (
+    PackagedSpectreCase,
+    list_packaged_spectre_cases,
+    load_all_packaged_spectre_cases,
+    load_packaged_spectre_case,
+    packaged_spectre_case_paths,
+)
 from .types import (
     BeltramiProblem,
     BeltramiLinearSystem,
@@ -58,6 +65,7 @@ __all__ = [
     "IterativeSolveResult",
     "NonlinearSolveResult",
     "ParameterScanBenchmark",
+    "PackagedSpectreCase",
     "ReferenceComparison",
     "SolveBenchmark",
     "SolveDiagnostics",
@@ -80,8 +88,11 @@ __all__ = [
     "compute_solve_diagnostics",
     "gmres_solve",
     "list_packaged_references",
+    "list_packaged_spectre_cases",
     "load_problem_json",
     "load_packaged_reference",
+    "load_packaged_spectre_case",
+    "load_all_packaged_spectre_cases",
     "load_saved_solution",
     "load_spectre_reference_h5",
     "load_spectre_input_toml",
@@ -90,6 +101,7 @@ __all__ = [
     "load_spec_text_dump",
     "magnetic_energy",
     "magnetic_helicity",
+    "packaged_spectre_case_paths",
     "relative_residual_norm",
     "residual",
     "residual_norm",

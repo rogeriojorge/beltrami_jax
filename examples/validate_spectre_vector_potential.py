@@ -25,6 +25,8 @@ import numpy as np
 from beltrami_jax import (
     SpectreVectorPotential,
     compare_vector_potentials,
+    list_packaged_spectre_cases,
+    load_packaged_spectre_case,
     load_spectre_reference_h5,
     load_spectre_input_toml,
     load_spectre_vector_potential_h5,
@@ -69,6 +71,17 @@ if real_cases:
         print(
             f"[beltrami_jax] {label}: shape={comparison.shape}, "
             f"nvol={input_summary.nvol}, lrad={input_summary.lrad}, "
+            f"global_relative_error={comparison.global_relative_error:.3e}"
+        )
+elif list_packaged_spectre_cases():
+    print("[beltrami_jax] local SPECTRE exports not found; using packaged SPECTRE fixtures")
+    for label in list_packaged_spectre_cases():
+        packaged = load_packaged_spectre_case(label)
+        comparison = packaged.comparison
+        comparisons.append(comparison.as_dict())
+        print(
+            f"[beltrami_jax] {label}: shape={comparison.shape}, "
+            f"nvol={packaged.input_summary.nvol}, lrad={packaged.input_summary.lrad}, "
             f"global_relative_error={comparison.global_relative_error:.3e}"
         )
 else:

@@ -448,6 +448,7 @@ What exists:
 - SPECTRE HDF5/NPZ vector-potential IO and comparison helpers in `src/beltrami_jax/spectre_io.py`
 - SPECTRE coefficient export and parity plotting tools
 - committed SPECTRE vector-potential parity panel under `docs/_static/spectre_vecpot_parity.png`
+- packaged public SPECTRE compare fixtures under `src/beltrami_jax/data/spectre_compare/`
 
 Currently packaged fixtures:
 
@@ -525,6 +526,8 @@ Source package:
   - SPECTRE TOML metadata loading and normalization
 - `src/beltrami_jax/spectre_io.py`
   - SPECTRE HDF5 vector-potential loading, NPZ exchange, and coefficient comparisons
+- `src/beltrami_jax/spectre_validation.py`
+  - packaged public SPECTRE compare-case loader and comparison summaries
 - `src/beltrami_jax/data/`
   - packaged `.npz` reference data and package marker for `importlib.resources`
 
@@ -1401,6 +1404,35 @@ Current interpretation:
 - This validates the SPECTRE-facing coefficient layout, HDF5 orientation, free-boundary update convention, and comparison metrics.
 - It does not yet validate a JAX-native SPECTRE Beltrami solve, because the fresh candidate coefficients are exported by SPECTRE itself.
 - The next research-grade milestone is to make `beltrami_jax` generate those coefficients directly from SPECTRE TOML/interface geometry.
+
+### 2026-04-30: packaged SPECTRE compare-case fixtures
+
+Implemented:
+
+- Added packaged SPECTRE compare fixtures under `src/beltrami_jax/data/spectre_compare/`.
+- Each case contains:
+  - `input.toml`
+  - `reference.h5`
+  - `fresh_spectre_export.npz`
+- Added `src/beltrami_jax/spectre_validation.py` with:
+  - `list_packaged_spectre_cases`
+  - `load_packaged_spectre_case`
+  - `load_all_packaged_spectre_cases`
+  - `packaged_spectre_case_paths`
+- Added `tests/test_spectre_validation.py`.
+- Updated `tools/generate_spectre_validation_assets.py` so `--use-packaged` regenerates the reviewer-facing parity plot without a local SPECTRE checkout.
+- Regenerated `docs/_static/spectre_vecpot_parity.png` and `docs/_static/spectre_vecpot_parity_summary.json` from packaged fixtures.
+
+Why this matters:
+
+- The SPECTRE vector-potential parity target is now reproducible in CI and by downstream users with only `beltrami_jax[dev]`.
+- The plot remains valid for future PR material because it is generated from committed assets rather than hidden local files.
+
+Verification after packaging these cases:
+
+- `./.venv/bin/python -m pytest`
+  - `40 passed in 23.59s`
+  - total coverage `95.23%`
 
 ## 19. Notes For Future Updates
 

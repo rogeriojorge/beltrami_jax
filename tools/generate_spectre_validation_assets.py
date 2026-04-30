@@ -12,8 +12,10 @@ import numpy as np
 
 from beltrami_jax import (
     compare_vector_potentials,
+    list_packaged_spectre_cases,
     load_spectre_reference_h5,
     load_spectre_vector_potential_npz,
+    load_packaged_spectre_case,
 )
 from beltrami_jax.spectre_io import COMPONENT_NAMES
 
@@ -27,6 +29,11 @@ DEFAULT_CASES = (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--use-packaged",
+        action="store_true",
+        help="Use packaged SPECTRE compare fixtures instead of local SPECTRE/export paths",
+    )
     parser.add_argument(
         "--spectre-root",
         type=Path,
@@ -61,30 +68,58 @@ def _flatten(vector_potential):
 def main() -> None:
     args = parse_args()
     cases = []
-    for label in DEFAULT_CASES:
-        candidate_path = args.candidate_dir / f"{label}.npz"
-        reference_path = args.spectre_root / "tests" / "compare" / label / "reference.h5"
-        if candidate_path.exists() and reference_path.exists():
-            cases.append((label, candidate_path, reference_path))
-        else:
-            print(
-                f"[spectre-validation] skipping {label}: "
-                f"candidate={candidate_path.exists()} reference={reference_path.exists()}"
-            )
+    use_packaged = args.use_packaged
+    if not use_packaged:
+        for label in DEFAULT_CASES:
+            candidate_path = args.candidate_dir / f"{label}.npz"
+            reference_path = args.spectre_root / "tests" / "compare" / label / "reference.h5"
+            if candidate_path.exists() and reference_path.exists():
+                cases.append((label, candidate_path, reference_path))
+            else:
+                print(
+                    f"[spectre-validation] skipping {label}: "
+                    f"candidate={candidate_path.exists()} reference={reference_path.exists()}"
+                )
+        if not cases:
+            print("[spectre-validation] no local SPECTRE cases found; using packaged fixtures")
+            use_packaged = True
 
-    if not cases:
-        raise FileNotFoundError(
-            "No SPECTRE validation cases found. First run tools/export_spectre_vecpot_npz.py "
-            "for at least one case, or pass paths matching the default generated directory."
-        )
-
-    print(f"[spectre-validation] generating parity panel for {len(cases)} cases")
+    if use_packaged:
+        loaded_cases = [load_packaged_spectre_case(label) for label in list_packaged_spectre_cases()]
+        print(f"[spectre-validation] generating packaged parity panel for {len(loaded_cases)} cases")
+    else:
+        loaded_cases = []
+        print(f"[spectre-validation] generating parity panel for {len(cases)} cases")
     rows = []
     candidate_all = []
     reference_all = []
     labels = []
     component_errors = {name: [] for name in COMPONENT_NAMES}
     max_abs_errors = {name: [] for name in COMPONENT_NAMES}
+
+    for loaded_case in loaded_cases:
+        label = loaded_case.label
+        candidate = loaded_case.candidate
+        reference = loaded_case.reference.vector_potential
+        comparison = loaded_case.comparison
+        rows.append(
+            {
+                "case": label,
+                "candidate": "packaged:fresh_spectre_export.npz",
+                "reference": "packaged:reference.h5",
+                **comparison.as_dict(),
+            }
+        )
+        labels.append(label)
+        candidate_all.append(_flatten(candidate))
+        reference_all.append(_flatten(reference))
+        for name in COMPONENT_NAMES:
+            component_errors[name].append(comparison.component_relative_errors[name])
+            max_abs_errors[name].append(comparison.component_max_abs_errors[name])
+        print(
+            f"[spectre-validation] {label}: global_rel={comparison.global_relative_error:.3e}, "
+            f"global_max_abs={comparison.global_max_abs_error:.3e}"
+        )
 
     for label, candidate_path, reference_path in cases:
         candidate = load_spectre_vector_potential_npz(candidate_path)
@@ -196,6 +231,7 @@ def main() -> None:
     args.summary.write_text(json.dumps(rows, indent=2), encoding="utf-8")
     print(f"[spectre-validation] wrote {args.output}")
     print(f"[spectre-validation] wrote {args.summary}")
+    print(f"[spectre-validation] worst global relative error: {max_global:.3e}")
 
 
 if __name__ == "__main__":

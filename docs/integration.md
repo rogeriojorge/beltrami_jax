@@ -119,6 +119,7 @@ Current supported use:
 - read and validate SPECTRE TOML input metadata
 - read SPECTRE HDF5 vector-potential coefficients
 - compare fresh SPECTRE coefficient exports against `reference.h5`
+- load packaged public SPECTRE compare cases for reproducible CI validation
 - use the comparison tooling as the target contract for the future JAX-native backend
 
 Intended future use:
@@ -135,6 +136,8 @@ Current safe entry points:
 - `load_spectre_reference_h5`
 - `load_spectre_vector_potential_npz`
 - `compare_vector_potentials`
+- `list_packaged_spectre_cases`
+- `load_packaged_spectre_case`
 
 Prototype-only entry points:
 
@@ -200,7 +203,7 @@ OMP_NUM_THREADS=1 DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib \
 Compare and plot from the `beltrami_jax` environment:
 
 ```bash
-PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_validation_assets.py
+PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_validation_assets.py --use-packaged
 ```
 
 This is intentionally separated from the JAX-native assembly work. It validates

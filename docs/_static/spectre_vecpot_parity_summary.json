@@ -1,8 +1,8 @@
 [
   {
     "case": "G2V32L1Fi",
-    "candidate": "examples/_generated/spectre_vecpot_exports/G2V32L1Fi.npz",
-    "reference": "/Users/rogerio/local/spectre/tests/compare/G2V32L1Fi/reference.h5",
+    "candidate": "packaged:fresh_spectre_export.npz",
+    "reference": "packaged:reference.h5",
     "label": "G2V32L1Fi",
     "shape": [
       56,
@@ -25,8 +25,8 @@
   },
   {
     "case": "G3V3L3Fi",
-    "candidate": "examples/_generated/spectre_vecpot_exports/G3V3L3Fi.npz",
-    "reference": "/Users/rogerio/local/spectre/tests/compare/G3V3L3Fi/reference.h5",
+    "candidate": "packaged:fresh_spectre_export.npz",
+    "reference": "packaged:reference.h5",
     "label": "G3V3L3Fi",
     "shape": [
       19,
@@ -49,8 +49,8 @@
   },
   {
     "case": "G3V3L2Fi_stability",
-    "candidate": "examples/_generated/spectre_vecpot_exports/G3V3L2Fi_stability.npz",
-    "reference": "/Users/rogerio/local/spectre/tests/compare/G3V3L2Fi_stability/reference.h5",
+    "candidate": "packaged:fresh_spectre_export.npz",
+    "reference": "packaged:reference.h5",
     "label": "G3V3L2Fi_stability",
     "shape": [
       19,
@@ -73,8 +73,8 @@
   },
   {
     "case": "G3V8L3Free",
-    "candidate": "examples/_generated/spectre_vecpot_exports/G3V8L3Free.npz",
-    "reference": "/Users/rogerio/local/spectre/tests/compare/G3V8L3Free/reference.h5",
+    "candidate": "packaged:fresh_spectre_export.npz",
+    "reference": "packaged:reference.h5",
     "label": "G3V8L3Free",
     "shape": [
       68,

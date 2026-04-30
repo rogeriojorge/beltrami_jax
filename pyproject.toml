@@ -65,7 +65,13 @@ Issues = "https://github.com/rogeriojorge/beltrami_jax/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-beltrami_jax = ["data/*.npz"]
+beltrami_jax = [
+  "data/*.npz",
+  "data/spectre_compare/*/*.h5",
+  "data/spectre_compare/*/*.npz",
+  "data/spectre_compare/*/*.toml",
+  "data/spectre_compare/*.md",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

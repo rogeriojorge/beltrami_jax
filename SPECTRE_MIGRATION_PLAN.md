@@ -94,6 +94,7 @@ Completed `beltrami_jax` work:
 - Added tests for the SPECTRE TOML and HDF5 IO layers.
 - Added `examples/validate_spectre_vector_potential.py`.
 - Added `tools/export_spectre_vecpot_npz.py` and `tools/generate_spectre_validation_assets.py`.
+- Added packaged public SPECTRE compare cases under `src/beltrami_jax/data/spectre_compare/` so coefficient parity is reproducible without a local SPECTRE checkout.
 - Generated `docs/_static/spectre_vecpot_parity.png`, showing worst global relative coefficient error `1.52e-14` across four public SPECTRE compare cases.
 
 Required remaining `beltrami_jax` work:
@@ -805,7 +806,7 @@ Consequences:
 
 1. Implement SPECTRE flattening/unflattening conventions from a JAX solution vector into `Ate/Aze/Ato/Azo`.
 2. Add SPECTRE wrapper functions or debug exports for Beltrami matrices, RHS, packed solution, and vector-potential arrays from each volume.
-3. Add `beltrami_jax` tests that compare JAX-native pack/unpack against SPECTRE-exported cases.
+3. Add `beltrami_jax` tests that compare JAX-native pack/unpack against the packaged SPECTRE compare cases.
 4. Start JAX port of SPECTRE geometry assembly branch by branch, beginning with one fixed-boundary stellarator-symmetric case.
 5. Add a SPECTRE fork/branch with a backend switch once the JAX path passes one coefficient-parity case.
 6. Expand to free-boundary and coordinate-singularity cases.

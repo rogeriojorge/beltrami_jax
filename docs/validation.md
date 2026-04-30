@@ -139,7 +139,9 @@ The test suite verifies:
 - `load_spectre_reference_h5` reads `vector_potential/Ate`, `Aze`, `Ato`, and `Azo` from SPECTRE reference files and transposes from SPECTRE HDF5 layout to radial-first Python layout.
 - `compare_vector_potentials` reports component-wise and global relative errors and max absolute coefficient differences.
 - `tools/export_spectre_vecpot_npz.py` runs from a SPECTRE environment and exports fresh coefficients from `spectre.get_vec_pot_flat`.
-- `tools/generate_spectre_validation_assets.py` compares those fresh exports against SPECTRE `reference.h5` files and writes the committed parity figure.
+- The four public SPECTRE compare cases are packaged under `src/beltrami_jax/data/spectre_compare/`.
+- `tools/generate_spectre_validation_assets.py --use-packaged` compares those packaged fresh exports against packaged SPECTRE `reference.h5` files and writes the committed parity figure.
+- Omitting `--use-packaged` compares against a local SPECTRE checkout and local fresh exports when those are present.
 
 Current public SPECTRE compare-case results:
 
@@ -148,12 +150,22 @@ Current public SPECTRE compare-case results:
 - `G3V3L2Fi_stability`: global relative coefficient error `1.52e-14`
 - `G3V8L3Free`: global relative coefficient error `2.79e-15`
 
+Programmatic access:
+
+```python
+from beltrami_jax import list_packaged_spectre_cases, load_packaged_spectre_case
+
+for label in list_packaged_spectre_cases():
+    case = load_packaged_spectre_case(label)
+    print(label, case.comparison.global_relative_error)
+```
+
 ## Coverage target
 
 The repository enforces a coverage threshold in `pyproject.toml`:
 
 - required line coverage: at least 90%
-- current release-gate result: `37 passed` with `95.00%` line coverage
+- current release-gate result: `40 passed` with `95.23%` line coverage
 
 ## Known validation gaps
 

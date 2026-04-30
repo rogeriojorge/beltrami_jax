@@ -76,6 +76,7 @@ Today the repository includes:
 - SPECTRE TOML input-summary loading for geometry, resolution, flux, constraint, and Fourier-boundary metadata
 - SPECTRE HDF5 vector-potential readers for `Ate`, `Aze`, `Ato`, and `Azo`
 - coefficient-level SPECTRE vector-potential comparison and plotting tools
+- packaged public SPECTRE compare cases for reproducible CI validation without a local SPECTRE checkout
 - standalone example workflows that define geometries, write input files, run solves, save outputs, and generate figures
 - tests that cover dumped SPEC systems and the internal geometry-driven workflow
 
@@ -91,6 +92,7 @@ Validation today has two levels:
 
 - `beltrami_jax` dense solves reproduce dumped SPEC matrices, RHS vectors, and packed solutions at machine precision for the committed fixtures.
 - Fresh SPECTRE exports reproduce SPECTRE `reference.h5` vector-potential coefficients with worst global relative coefficient error `1.52e-14` across four public SPECTRE compare cases.
+- Those four SPECTRE compare cases are packaged under `beltrami_jax.data.spectre_compare` so CI and downstream users can reproduce the coefficient target without installing SPECTRE.
 
 The remaining SPECTRE replacement milestone is stronger: make the JAX-native assembly and solve path produce those same `Ate`, `Aze`, `Ato`, and `Azo` coefficients directly from SPECTRE TOML/interface geometry.
 
@@ -157,8 +159,8 @@ The example scripts are intentionally standalone. Each script keeps its input pa
 
 Latest local release gate:
 
-- `37 passed in 19.71s`
-- `95.00%` total line coverage
+- `40 passed in 23.59s`
+- `95.23%` total line coverage
 - strict Sphinx build passed with `-W`
 - runtime code does not depend on `tomllib`, so Python `3.10+` support is not blocked by stdlib TOML parsing differences
 
@@ -308,6 +310,7 @@ The current SPECTRE-facing utilities can already inspect SPECTRE TOML inputs and
 ```python
 from beltrami_jax import (
     compare_vector_potentials,
+    load_packaged_spectre_case,
     load_spectre_input_toml,
     load_spectre_reference_h5,
     load_spectre_vector_potential_npz,
@@ -317,9 +320,11 @@ summary = load_spectre_input_toml("/path/to/spectre/input.toml")
 reference = load_spectre_reference_h5("/path/to/spectre/reference.h5").vector_potential
 candidate = load_spectre_vector_potential_npz("/path/to/fresh_spectre_export.npz")
 comparison = compare_vector_potentials(candidate, reference, label="case")
+packaged_case = load_packaged_spectre_case("G3V3L3Fi")
 
 print(summary.lrad)
 print(comparison.global_relative_error)
+print(packaged_case.comparison.global_relative_error)
 ```
 
 The intended JAX-native replacement contract is:
@@ -378,8 +383,10 @@ OMP_NUM_THREADS=1 DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib \
 Then generate the figure from the `beltrami_jax` environment:
 
 ```bash
-PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_validation_assets.py
+PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_validation_assets.py --use-packaged
 ```
+
+Omit `--use-packaged` to compare against a local SPECTRE checkout and fresh local exports instead.
 
 ## Documentation
 

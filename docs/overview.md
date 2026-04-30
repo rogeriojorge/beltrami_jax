@@ -63,6 +63,8 @@ The package currently provides:
   - loads SPECTRE TOML metadata into a normalized input summary
 - `load_spectre_reference_h5`, `compare_vector_potentials`
   - load and compare SPECTRE HDF5 `Ate`, `Aze`, `Ato`, and `Azo` coefficient arrays
+- `load_packaged_spectre_case`
+  - loads packaged public SPECTRE compare cases for reproducible coefficient-target tests
 - `save_problem_json`, `load_problem_json`, `save_nonlinear_solution`
   - handle user-facing input and output files for standalone workflows
 

@@ -100,8 +100,9 @@ This example:
 - reads SPECTRE TOML metadata with `load_spectre_input_toml`
 - loads SPECTRE HDF5 vector-potential datasets with `load_spectre_reference_h5`
 - loads fresh exported SPECTRE coefficients from `.npz` files when they are present
+- uses packaged SPECTRE compare cases when local SPECTRE exports are absent
 - compares `Ate`, `Aze`, `Ato`, and `Azo` with `compare_vector_potentials`
-- falls back to a synthetic SPECTRE-layout HDF5 file when SPECTRE is not installed locally
+- falls back to a synthetic SPECTRE-layout HDF5 file only if packaged validation fixtures are unavailable
 - writes a JSON summary and a compact validation figure under `examples/_generated/validate_spectre_vector_potential/`
 
 Committed SPECTRE parity figure:
@@ -119,7 +120,7 @@ PYTHONPATH=src ./.venv/bin/python tools/generate_validation_assets.py --repeats 
 The SPECTRE HDF5 coefficient parity figure is built with:
 
 ```bash
-PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_validation_assets.py
+PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_validation_assets.py --use-packaged
 ```
 
 ## Example usage from Python

@@ -129,6 +129,59 @@ Committed SPECTRE linear parity figure:
 
 ![SPECTRE linear-system parity](_static/spectre_linear_parity.png)
 
+## SPECTRE TOML volume and full-case solves
+
+The user-facing SPECTRE replacement helpers are `solve_spectre_volume_from_input`
+for one packed volume and `solve_spectre_volumes_from_input` for a full
+SPECTRE-compatible `Ate/Aze/Ato/Azo` coefficient block. They start from a
+SPECTRE TOML summary, assemble the local matrices in JAX, solve the Beltrami
+system, and unpack directly to `Ate/Aze/Ato/Azo`:
+
+```python
+from beltrami_jax import load_packaged_spectre_case, solve_spectre_volume_from_input
+
+case = load_packaged_spectre_case("G3V3L3Fi")
+result = solve_spectre_volume_from_input(case.input_summary, lvol=2, verbose=True)
+
+print(result.vector_potential.ate.shape)
+print(float(result.relative_residual_norm))
+```
+
+For exact comparison against a completed SPECTRE fixture, pass the final
+SPECTRE branch values:
+
+```python
+from beltrami_jax import load_packaged_spectre_linear_system
+
+fixture = load_packaged_spectre_linear_system("G3V3L3Fi/lvol2")
+result = solve_spectre_volume_from_input(
+    case.input_summary,
+    lvol=2,
+    mu=fixture.system.mu,
+    psi=fixture.system.psi,
+)
+```
+
+Without explicit `mu`/`psi`, the helper uses the normalized TOML initial state.
+
+Run the full multi-volume example:
+
+```bash
+./.venv/bin/python examples/spectre_toml_full_solve.py
+```
+
+This example:
+
+- loads one packaged released-SPECTRE TOML compare case
+- injects the packaged post-constraint `mu`/`psi` state for strict validation
+- assembles `dMA/dMD/dMB/dMG` for all packed volumes in JAX
+- solves all packed volumes and concatenates a full vector-potential block
+- writes `jax_vector_potential.npz`, a JSON summary, and a parity figure
+
+Committed SPECTRE TOML full-solve figure:
+
+![SPECTRE TOML full solve](_static/spectre_toml_full_solve.png)
+
 ## SPECTRE interface-geometry probe
 
 Run:

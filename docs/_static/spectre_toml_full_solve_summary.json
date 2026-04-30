@@ -1,0 +1,24 @@
+{
+  "case": "G3V3L3Fi",
+  "source": "/Users/rogerio/local/beltrami_jax/src/beltrami_jax/data/spectre_compare/G3V3L3Fi/input.toml",
+  "packed_volume_count": 3,
+  "shape": [
+    19,
+    23
+  ],
+  "global_relative_error": 1.6845278543755404e-14,
+  "global_max_abs_error": 9.823734598389947e-16,
+  "component_relative_errors": {
+    "ate": 6.257869335537429e-15,
+    "aze": 5.380391285879309e-14,
+    "ato": 0.0,
+    "azo": 0.0
+  },
+  "relative_residual_norms": [
+    7.089015620434972e-13,
+    1.2795128212894317e-13,
+    1.6999718765384118e-13
+  ],
+  "max_relative_residual_norm": 7.089015620434972e-13,
+  "note": "Post-constraint SPECTRE mu/psi values are injected here only to validate the linear assembly/solve lane."
+}

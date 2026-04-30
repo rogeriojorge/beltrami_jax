@@ -21,19 +21,21 @@ What currently works:
 - It now reconstructs SPECTRE's Fourier mode order, per-volume coefficient id maps, and `packab`-compatible solution-vector layout for `Ate/Aze/Ato/Azo`.
 - It now packages released-SPECTRE per-volume Beltrami linear systems and validates JAX matrix/RHS/solution parity for 19 volume solves.
 - It now exposes a narrow SPECTRE backend adapter for already assembled `dMA/dMD/dMB/dMG` arrays, so the first SPECTRE-side experiment can be a small optional branch rather than a Fortran rewrite.
+- It now assembles SPECTRE `dMA/dMD/dMB/dMG` directly from TOML/interface geometry for the packaged cylindrical, toroidal, free-boundary, and vacuum branches.
+- It now solves a SPECTRE volume from TOML/interface geometry and unpacks directly to `Ate/Aze/Ato/Azo` when supplied the same post-constraint `mu`/flux state used by SPECTRE.
 
 What is not yet done:
 
-- It does not yet solve directly from the same user-facing input as SPECTRE, namely a TOML configuration or interface Fourier geometry with SPECTRE's exact basis, packing, constraints, and branch logic.
-- It does not yet make the JAX-native solver produce SPECTRE/SPEC HDF5 vector-potential coefficient datasets `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`.
-- It does not yet implement SPECTRE's full geometry integral assembly, free-boundary field update details, or constraint logic in JAX.
+- It does not yet compute SPECTRE rotational-transform/current diagnostics directly from the solved JAX fields.
+- It does not yet run the full nonlinear local/global constraint loop that updates `mu`, `dtflux`, and `dpflux` without SPECTRE metadata injection.
+- It does not yet cover enough non-stellarator-symmetric and high-resolution fixtures to claim full SPECTRE backend replacement.
 - The docs have been tightened, but must continue to avoid claiming SPECTRE backend replacement before JAX-native coefficient parity exists.
 
 Recommended immediate direction:
 
 - Treat `beltrami_jax` as a strict SPECTRE Beltrami backend project, not as a loosely similar Beltrami solver.
-- First match SPECTRE's existing Python/Fortran wrappers at the vector-potential coefficient level.
-- Only after coefficient parity is established should we replace SPECTRE assembly and constraint logic with JAX-native code.
+- Next implement JAX-native transform/current diagnostics and feed them into the existing `Lconstraint` branch layer.
+- Only after post-constraint coefficient parity is established without injected SPECTRE metadata should we attempt the SPECTRE fork replacement branch.
 
 ## 2. Direct Answers to the Collaborator's Email
 
@@ -41,15 +43,16 @@ Recommended immediate direction:
 
 Current answer:
 
-- `beltrami_jax` has two input modes today.
+- `beltrami_jax` has three input modes today.
 - Mode 1 is the regression/developer mode: load packaged fixtures or text dumps containing already assembled SPEC-style matrices and vectors: `d_ma`, `d_md`, `d_mb`, optional `d_mg`, `mu`, `psi`, RHS, matrix, and expected solution.
 - Mode 2 is the internal geometry prototype: create a `FourierBeltramiGeometry`, build a `FourierModeBasis`, assemble a toy/SPEC-style linear system internally, and solve it.
+- Mode 3 is the SPECTRE TOML/interface-geometry mode: load `SpectreInputSummary`, assemble SPECTRE-compatible volume matrices, solve one volume with `solve_spectre_volume_from_input`, and unpack to `Ate/Aze/Ato/Azo`.
 
 Important correction:
 
 - The current geometry-driven mode is not equivalent to SPECTRE or SPEC arbitrary 3D interface input.
 - It uses a shaped large-aspect-ratio torus parameterization in `src/beltrami_jax/geometry.py`.
-- The user-facing SPECTRE target must instead accept SPECTRE TOML or SPECTRE interface Fourier coefficients, then assemble the exact SPECTRE Beltrami system and return SPECTRE-compatible vector-potential coefficients.
+- The user-facing SPECTRE target now exists for per-volume linear solves, but the final nonlinear diagnostic loop still needs to be ported before it can reproduce post-constraint SPECTRE runs from TOML alone.
 
 Final target input contract:
 
@@ -62,9 +65,9 @@ Final target input contract:
 
 Current `beltrami_jax` answer:
 
-- Yes for the SPECTRE IO/validation contract; not yet for a JAX-native SPECTRE backend.
+- Yes for the SPECTRE IO/validation contract and for validated per-volume JAX-assembled solves when supplied the post-constraint SPECTRE branch state.
 - `beltrami_jax` now loads SPECTRE `reference.h5` vector-potential datasets and compares them to fresh SPECTRE exports from `spectre.get_vec_pot_flat`.
-- The JAX-native internal solver still needs exact SPECTRE geometry assembly before it can produce those HDF5 coefficients directly; the SPECTRE coefficient pack/unpack maps are now implemented.
+- The JAX-native SPECTRE path can now assemble and unpack per-volume coefficients; the remaining blocker is computing the final post-constraint branch state and field diagnostics without SPECTRE injection.
 - Existing dense validation compares to linear systems dumped from an instrumented local SPEC build and now also to released SPECTRE per-volume linear-system exports: operator, RHS, and solved degree-of-freedom vector.
 
 SPECTRE assessment:
@@ -666,7 +669,7 @@ New code candidates:
 Acceptance:
 
 - JAX-assembled `dMA`, `dMD`, `dMB`, `dMG` match SPECTRE for the same input cases.
-- Status: `dMB/dMG` from SPECTRE `matrixBG` are implemented in `spectre_matrix.py`; `dMA/dMD` volume-integral assembly remains.
+- Status: `dMB/dMG` from SPECTRE `matrixBG` and `dMA/dMD` from SPECTRE `matrix`/`volume_integrate_chebyshev` are implemented for the packaged validated branches. Remaining Phase 4 work is broader fixture diversity and production sparse/matrix-free strategy, not the packaged dense matrix formulas.
 - Start with `rtol=1e-12` for matrices after accounting for quadrature and ordering; tighten as branch parity stabilizes.
 
 ### Phase 5: Port Full Constraint Loop
@@ -991,3 +994,83 @@ What remains:
 - Port SPECTRE/SPEC `matrix` and `intghs` volume-integral contractions for `dMA/dMD`.
 - Add JAX-native field diagnostics for rotational transform and plasma current.
 - Combine JAX `dMA/dMD`, JAX `matrixBG` `dMB/dMG`, branch solves, and `spectre_pack` unpacking to generate `Ate/Aze/Ato/Azo` directly from SPECTRE TOML/interface geometry.
+
+## 15. 2026-04-30 Progress: JAX-Native SPECTRE Volume Matrix Assembly and Per-Volume Coefficient Solves
+
+New completed ingredients:
+
+- Added `src/beltrami_jax/spectre_radial.py`.
+  - Ports SPECTRE radial basis, axis basis, quadrature sizing, and angular-grid defaults.
+- Added `src/beltrami_jax/spectre_integrals.py`.
+  - Assembles the metric-integral tensors consumed by SPECTRE `matrices_mod.F90::matrix`.
+- Added `src/beltrami_jax/spectre_volume_matrix.py`.
+  - Ports SPECTRE `dMA/dMD` matrix contractions.
+  - Combines `dMA/dMD` with the existing `matrixBG` `dMB/dMG` path.
+- Added `src/beltrami_jax/spectre_solve.py`.
+  - Provides SPECTRE-normalized `dtflux/dpflux` helpers.
+  - Provides `solve_spectre_volume_from_input`, which assembles, solves, and unpacks one SPECTRE volume into `Ate/Aze/Ato/Azo`.
+- Extended `src/beltrami_jax/spectre_geometry.py`.
+  - Implements centroid `Lrzaxis=1` axis initialization for toroidal coordinate-axis branches.
+  - Recomputes the free-boundary coordinate axis consistently with SPECTRE geometry unpacking.
+  - Generates cylindrical and toroidal `Linitialize=1` interface rows from normalized SPECTRE fluxes.
+
+What this closes:
+
+- JAX-native `dMA/dMD` parity is no longer blocked on the packaged toroidal axis/generated-interface branches.
+- The packaged public SPECTRE volume matrices now match at roundoff for:
+  - `G2V32L1Fi`: cylindrical coordinate-singularity and bulk volumes.
+  - `G3V3L3Fi`: toroidal generated-interface volumes.
+  - `G3V3L2Fi_stability`: toroidal generated-interface stability case.
+  - `G3V8L3Free`: explicit-interface free-boundary plasma volumes and vacuum exterior volume.
+- `beltrami_jax` can now produce SPECTRE-shaped `Ate/Aze/Ato/Azo` arrays from TOML/interface geometry for validated branches when supplied the same post-constraint local `mu` and flux vector that SPECTRE used.
+
+Verification:
+
+- Full local test suite after this lane: `105 passed in 140.92s`, total coverage `91.71%`.
+
+Important bug fixed:
+
+- `G3V8L3Free/lvol1` previously showed a `dMA` relative mismatch around `2.2e-2` while `dMD` was exact. The cause was not the matrix formula. SPECTRE recomputes the toroidal coordinate axis during geometry unpacking when geometry degrees of freedom are active, even when the TOML file contains a positive `Rac(0)`. Implementing centroid `rzaxis` and using it for the free-boundary axis brings `lvol1` to roundoff matrix parity.
+
+Current remaining blockers before a serious SPECTRE replacement PR:
+
+- JAX-native rotational-transform and plasma-current diagnostics.
+- The nonlinear local/global constraint loop that updates `mu`, `dtflux`, and `dpflux` from those diagnostics.
+- More non-stellarator-symmetric and high-resolution public fixtures.
+- Production sparse or matrix-free solve strategy if dense local solves become too expensive in SPECTRE-scale use.
+- A small SPECTRE fork experiment after the above is in place, preferably with one backend flag and a narrow adapter surface.
+
+## 16. 2026-04-30 Progress: Full TOML-to-`Ate/Aze/Ato/Azo` Linear Entry Point
+
+New completed ingredients:
+
+- Extended `src/beltrami_jax/spectre_solve.py`.
+  - Adds `SpectreMultiVolumeSolve`.
+  - Adds `solve_spectre_volumes_from_input(summary, ...)`.
+  - Adds `solve_spectre_toml(path, ...)`.
+- Added `examples/spectre_toml_full_solve.py`.
+  - Demonstrates the full current SPECTRE linear replacement lane:
+    SPECTRE TOML/interface geometry -> JAX `dMA/dMD/dMB/dMG` assembly -> JAX solve -> full `Ate/Aze/Ato/Azo` coefficient block.
+  - Writes a coefficient archive, JSON summaries, and a static reviewer-facing parity figure.
+- Added `docs/_static/spectre_toml_full_solve.png` and matching summary JSON.
+
+What this closes:
+
+- Users no longer need to call the per-volume helper manually to get full SPECTRE-shaped output.
+- The high-level integration API can now return the same coefficient object that SPECTRE downstream code needs.
+- The packaged `G3V3L3Fi` full-case linear validation now reconstructs all packed vector-potential coefficients with global relative error `1.685e-14` when supplied SPECTRE's final branch `mu`/flux state.
+- The maximum relative residual across those three volume solves is `7.089e-13`.
+
+What this still does not close:
+
+- This is still a linear assembly/solve parity lane. It does not yet compute the post-constraint `mu`, `dtflux`, or `dpflux` state from TOML alone.
+- Exact fixture parity still injects SPECTRE's final local branch state. That is now clearly documented as a validation bridge.
+- Full SPEC/SPECTRE removal requires the next lane: JAX-native current/transform diagnostics plus the nonlinear `Lconstraint` update loop.
+
+Best next implementation order:
+
+1. Port `plasma_current_mod.F90::compute_plasma_current` first, because it is algebraic in the solved coefficients and interface metrics.
+2. Validate current values and derivatives against a SPECTRE export instrumented to dump `dItGpdxtp`.
+3. Port or approximate-scope `magnetic_field_mod.F90::compute_rotational_transform`, beginning with the released `Lsparse`/`Lsvdiota` branch used by public tests.
+4. Add a local Newton loop that wraps `solve_spectre_beltrami_branch`, diagnostics, and `evaluate_spectre_constraints`.
+5. Only then modify the SPECTRE fork to call the JAX backend without SPEC/Fortran Beltrami assembly.

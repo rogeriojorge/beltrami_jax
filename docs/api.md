@@ -38,9 +38,13 @@ The main implementation files are:
 - `src/beltrami_jax/spectre_io.py`
 - `src/beltrami_jax/spectre_layout.py`
 - `src/beltrami_jax/spectre_linear.py`
+- `src/beltrami_jax/spectre_integrals.py`
 - `src/beltrami_jax/spectre_matrix.py`
 - `src/beltrami_jax/spectre_pack.py`
+- `src/beltrami_jax/spectre_radial.py`
+- `src/beltrami_jax/spectre_solve.py`
 - `src/beltrami_jax/spectre_validation.py`
+- `src/beltrami_jax/spectre_volume_matrix.py`
 - `src/beltrami_jax/diagnostics.py`
 - `src/beltrami_jax/benchmark.py`
 
@@ -150,6 +154,38 @@ These are the files to read if you want to understand how the package maps geome
 .. automodule:: beltrami_jax.spectre_matrix
    :members:
    :exclude-members: Array
+```
+
+## SPECTRE radial basis and quadrature
+
+```{eval-rst}
+.. automodule:: beltrami_jax.spectre_radial
+   :members:
+   :exclude-members: Array
+```
+
+## SPECTRE metric-integral assembly
+
+```{eval-rst}
+.. automodule:: beltrami_jax.spectre_integrals
+   :members:
+   :exclude-members: Array
+```
+
+## SPECTRE dMA/dMD volume-matrix assembly
+
+```{eval-rst}
+.. automodule:: beltrami_jax.spectre_volume_matrix
+   :members:
+   :exclude-members: Array
+```
+
+## SPECTRE TOML volume and full-case solves
+
+```{eval-rst}
+.. automodule:: beltrami_jax.spectre_solve
+   :members:
+   :exclude-members: Array, ArrayLike
 ```
 
 ## SPECTRE HDF5 vector-potential IO

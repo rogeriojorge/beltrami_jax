@@ -11,6 +11,7 @@ from jax.typing import ArrayLike
 
 from .spectre_input import ModeTable, SpectreInputSummary
 from .spectre_pack import spectre_fourier_modes
+from .spectre_radial import spectre_default_angular_grid
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,173 @@ def _interface_tables(summary: SpectreInputSummary) -> tuple[dict[str, ModeTable
     return tuple(interfaces)
 
 
+def _normalized_tflux(summary: SpectreInputSummary) -> np.ndarray:
+    raw = np.asarray(summary.fluxes["tflux"], dtype=np.float64)
+    if raw.size < summary.nvol:
+        raise ValueError("SPECTRE input does not provide enough tflux values for interface initialization")
+    reference = raw[summary.nvol - 1]
+    if reference == 0.0:
+        raise ValueError("SPECTRE tflux(Nvol) must be nonzero for interface initialization")
+    return raw / reference
+
+
+def _reference_interface_index(summary: SpectreInputSummary, interface_count: int) -> int:
+    """Return the one-based SPECTRE interface used by ``rzaxis`` initialization."""
+
+    linitialize = int(summary.numeric.get("linitialize", 1))
+    if linitialize <= -1:
+        reference = summary.nvol + linitialize
+    elif linitialize == 0:
+        reference = 1
+    elif linitialize == 1:
+        reference = summary.nvol
+    else:
+        reference = summary.packed_volume_count
+    return min(max(reference, 1), interface_count)
+
+
+def _evaluate_numpy_series(
+    modes: tuple[tuple[int, int], ...],
+    even_cos: np.ndarray,
+    odd_sin: np.ndarray,
+    *,
+    theta: np.ndarray,
+    zeta: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    poloidal_modes = np.asarray([mode[0] for mode in modes], dtype=np.float64)
+    toroidal_modes = np.asarray([mode[1] for mode in modes], dtype=np.float64)
+    phase = poloidal_modes[:, None, None] * theta[None, :, None] - toroidal_modes[:, None, None] * zeta[None, None, :]
+    cos_phase = np.cos(phase)
+    sin_phase = np.sin(phase)
+    value = np.sum(even_cos[:, None, None] * cos_phase + odd_sin[:, None, None] * sin_phase, axis=0)
+    dtheta = np.sum(
+        -poloidal_modes[:, None, None] * even_cos[:, None, None] * sin_phase
+        + poloidal_modes[:, None, None] * odd_sin[:, None, None] * cos_phase,
+        axis=0,
+    )
+    return value, dtheta
+
+
+def _estimate_toroidal_axis_centroid(
+    summary: SpectreInputSummary,
+    modes: tuple[tuple[int, int], ...],
+    reference_rows: dict[str, np.ndarray],
+) -> dict[str, np.ndarray]:
+    """Approximate SPECTRE ``rzaxis`` with the ``Lrzaxis=1`` centroid method."""
+
+    nt, nz = spectre_default_angular_grid(summary)
+    theta = np.arange(nt, dtype=np.float64) * (2.0 * np.pi / nt)
+    zeta = np.arange(nz, dtype=np.float64) * (2.0 * np.pi / (summary.nfp * nz))
+    radius, d_radius_dtheta = _evaluate_numpy_series(
+        modes,
+        reference_rows["rbc"],
+        reference_rows["rbs"],
+        theta=theta,
+        zeta=zeta,
+    )
+    height, d_height_dtheta = _evaluate_numpy_series(
+        modes,
+        reference_rows["zbc"],
+        reference_rows["zbs"],
+        theta=theta,
+        zeta=zeta,
+    )
+    poloidal_length = np.sqrt(d_radius_dtheta * d_radius_dtheta + d_height_dtheta * d_height_dtheta)
+    length_by_zeta = np.sum(poloidal_length, axis=0)
+    if np.any(length_by_zeta <= 0.0):
+        raise ValueError("cannot estimate toroidal coordinate axis from a zero-length reference surface")
+    axis_radius = np.sum(radius * poloidal_length, axis=0) / length_by_zeta
+    axis_height = np.sum(height * poloidal_length, axis=0) / length_by_zeta
+
+    rows = {name: np.zeros((len(modes),), dtype=np.float64) for name in ("rbc", "zbs", "rbs", "zbc")}
+    for index, (m_value, n_value) in enumerate(modes):
+        if m_value != 0:
+            continue
+        phase = -float(n_value) * zeta
+        cos_phase = np.cos(phase)
+        sin_phase = np.sin(phase)
+        if n_value == 0:
+            rows["rbc"][index] = float(np.mean(axis_radius))
+            rows["zbc"][index] = float(np.mean(axis_height))
+        else:
+            rows["rbc"][index] = float(2.0 * np.mean(axis_radius * cos_phase))
+            rows["rbs"][index] = float(2.0 * np.mean(axis_radius * sin_phase))
+            rows["zbc"][index] = float(2.0 * np.mean(axis_height * cos_phase))
+            rows["zbs"][index] = float(2.0 * np.mean(axis_height * sin_phase))
+    return rows
+
+
+def _generated_interface_rows(
+    summary: SpectreInputSummary,
+    modes: tuple[tuple[int, int], ...],
+    axis_rows: dict[str, np.ndarray],
+) -> dict[str, list[np.ndarray]] | None:
+    """Generate SPECTRE ``Linitialize=1`` interface rows when ``allrzrz`` is absent."""
+
+    if summary.physics.get("allrzrz", {}):
+        return None
+    if int(summary.numeric.get("linitialize", 1)) == 0:
+        return None
+    boundary = summary.boundary_tables()
+    if not boundary["rbc"] or summary.packed_volume_count <= 1:
+        return None
+
+    m_values = np.asarray([mode[0] for mode in modes], dtype=np.float64)
+    half_m = 0.5 * m_values
+    tflux = _normalized_tflux(summary)
+    boundary_rows = {
+        name: _tables_to_mode_array(boundary[name], modes, nfp=summary.nfp)
+        for name in ("rbc", "zbs", "rbs", "zbc")
+    }
+    zero_row = np.zeros((len(modes),), dtype=np.float64)
+
+    if summary.igeometry in (1, 2):
+        axis = {name: zero_row.copy() for name in ("rbc", "zbs", "rbs", "zbc")}
+    else:
+        axis = {name: axis_rows[name].copy() for name in ("rbc", "zbs", "rbs", "zbc")}
+        axis["zbs"][0] = 0.0
+        axis["rbs"][0] = 0.0
+
+    generated = {name: [axis[name]] for name in ("rbc", "zbs", "rbs", "zbc")}
+
+    if summary.igeometry == 1:
+        for vvol in range(1, summary.nvol):
+            factor = tflux[vvol - 1] / tflux[summary.packed_volume_count - 1]
+            generated["rbc"].append(boundary_rows["rbc"] * factor)
+            generated["zbs"].append(zero_row.copy())
+            generated["rbs"].append(boundary_rows["rbs"] * factor)
+            generated["zbc"].append(zero_row.copy())
+    elif summary.igeometry == 2:
+        for vvol in range(1, summary.nvol):
+            factor = np.where(m_values == 0.0, tflux[vvol - 1] ** 0.5, tflux[vvol - 1] ** (half_m - 0.5))
+            generated["rbc"].append(boundary_rows["rbc"] * factor)
+            generated["zbs"].append(zero_row.copy())
+            generated["rbs"].append(boundary_rows["rbs"] * factor)
+            generated["zbc"].append(zero_row.copy())
+    elif summary.igeometry == 3:
+        for vvol in range(1, summary.nvol):
+            factor = np.where(m_values == 0.0, tflux[vvol - 1] ** 0.5, tflux[vvol - 1] ** half_m)
+            for name in ("rbc", "zbs", "rbs", "zbc"):
+                generated[name].append(axis[name] + (boundary_rows[name] - axis[name]) * factor)
+    else:
+        return None
+
+    for name in ("rbc", "zbs", "rbs", "zbc"):
+        generated[name].append(boundary_rows[name])
+
+    if summary.is_free_boundary:
+        wall_tables = {
+            "rbc": _parse_mode_table(summary.physics.get("rwc", {})),
+            "zbs": _parse_mode_table(summary.physics.get("zws", {})),
+            "rbs": _parse_mode_table(summary.physics.get("rws", {})),
+            "zbc": _parse_mode_table(summary.physics.get("zwc", {})),
+        }
+        for name in ("rbc", "zbs", "rbs", "zbc"):
+            generated[name].append(_tables_to_mode_array(wall_tables[name], modes, nfp=summary.nfp))
+
+    return generated
+
+
 def build_spectre_interface_geometry(summary: SpectreInputSummary) -> SpectreInterfaceGeometry:
     """Build SPECTRE interface coefficient arrays in internal Fourier order."""
 
@@ -167,11 +335,34 @@ def build_spectre_interface_geometry(summary: SpectreInputSummary) -> SpectreInt
         raise ValueError("SPECTRE input does not provide boundary or allrzrz interface geometry")
 
     rows: dict[str, list[np.ndarray]] = {name: [] for name in ("rbc", "zbs", "rbs", "zbc")}
-    for name in rows:
-        rows[name].append(_tables_to_mode_array(axis_tables[name], modes, nfp=summary.nfp))
-    for interface in interfaces:
+    axis_rows = {
+        name: _tables_to_mode_array(axis_tables[name], modes, nfp=summary.nfp)
+        for name in rows
+    }
+    should_estimate_axis = (
+        summary.igeometry == 3
+        and int(summary.numeric.get("lrzaxis", 1)) > 0
+        and (axis_rows["rbc"][0] <= 0.0 or summary.is_free_boundary)
+    )
+    if should_estimate_axis:
+        reference_index = _reference_interface_index(summary, len(interfaces))
+        reference_rows = {
+            name: _tables_to_mode_array(interfaces[reference_index - 1].get(name, {}), modes, nfp=summary.nfp)
+            for name in rows
+        }
+        axis_rows = _estimate_toroidal_axis_centroid(summary, modes, reference_rows)
+    generated_rows = _generated_interface_rows(summary, modes, axis_rows)
+    if generated_rows is None:
         for name in rows:
-            rows[name].append(_tables_to_mode_array(interface.get(name, {}), modes, nfp=summary.nfp))
+            if summary.igeometry == 3:
+                rows[name].append(axis_rows[name])
+            else:
+                rows[name].append(np.zeros((len(modes),), dtype=np.float64))
+        for interface in interfaces:
+            for name in rows:
+                rows[name].append(_tables_to_mode_array(interface.get(name, {}), modes, nfp=summary.nfp))
+    else:
+        rows = generated_rows
 
     return SpectreInterfaceGeometry(
         poloidal_modes=jnp.asarray(poloidal_modes, dtype=jnp.int32),

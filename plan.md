@@ -1817,3 +1817,134 @@ Current next lane:
 - Port the SPECTRE/SPEC `matrix` and `intghs` volume-integral contractions for `dMA/dMD`.
 - Use the packaged released-SPECTRE linear fixtures as component targets.
 - After `dMA/dMD` parity, combine JAX `dMA/dMD`, JAX `matrixBG` `dMB/dMG`, branch solves, and `spectre_pack` unpacking to generate `Ate/Aze/Ato/Azo` directly from SPECTRE TOML/interface geometry.
+
+## 24. 2026-04-30 Addendum: SPECTRE `dMA/dMD`, Toroidal Axis Parity, and TOML-to-Coefficient Solves
+
+Goal of this lane:
+
+- Continue removing SPECTRE/SPEC Fortran from the Beltrami path.
+- Port SPECTRE `matrices_mod.F90::matrix` and `chebyshev_mod.F90::volume_integrate_chebyshev` ingredients for `dMA/dMD`.
+- Close branch-specific matrix parity for cylindrical, toroidal generated-interface, explicit-interface, free-boundary, and vacuum packaged cases.
+- Produce SPECTRE-compatible `Ate/Aze/Ato/Azo` directly from TOML/interface geometry after JAX assembly.
+
+Files added:
+
+- `src/beltrami_jax/spectre_radial.py`
+  - Ports SPECTRE Chebyshev/Zernike radial basis behavior, endpoint recombination, `get_zernike_rm` axis values, quadrature sizing, and default angular-grid sizing.
+- `src/beltrami_jax/spectre_integrals.py`
+  - Directly assembles SPECTRE metric-integral tensors consumed by `matrices_mod.F90::matrix`.
+  - Uses JAX evaluation of interface geometry and direct angular products instead of reproducing SPECTRE's intermediate FFT coefficient tables.
+- `src/beltrami_jax/spectre_volume_matrix.py`
+  - Ports the SPECTRE `dMA/dMD` matrix-contraction formulas for stellarator-symmetric and non-stellarator-symmetric maps.
+  - Combines `dMA/dMD` with the existing `matrixBG` path through `assemble_spectre_volume_matrices_from_input`.
+- `src/beltrami_jax/spectre_solve.py`
+  - Adds `spectre_normalized_fluxes` and `spectre_volume_flux_vector`, matching SPECTRE's input flux normalization and per-volume `dtflux/dpflux` construction.
+  - Adds `solve_spectre_volume_from_input`, which assembles `dMA/dMD/dMB/dMG`, solves one local Beltrami system, and unpacks the result into SPECTRE `Ate/Aze/Ato/Azo` arrays.
+- `tests/test_spectre_volume_matrix.py`
+  - Validates radial basis endpoint and axis-value parity.
+  - Validates cylindrical `Linitialize=1` generated interfaces.
+  - Validates `dMA/dMD` parity against released SPECTRE fixtures.
+  - Validates non-stellarator-symmetric contraction branches using synthetic metadata.
+  - Validates TOML-to-solve-to-`Ate/Aze/Ato/Azo` unpacking for a packaged SPECTRE case.
+
+Files modified:
+
+- `src/beltrami_jax/spectre_geometry.py`
+  - Adds centroid-style SPECTRE `Lrzaxis=1` coordinate-axis initialization for toroidal geometry.
+  - Fixes the previous handling of negative/placeholder `Rac(0)` values and free-boundary axis recomputation.
+  - Generates toroidal `Linitialize=1` interfaces using the normalized SPECTRE flux convention.
+- `src/beltrami_jax/__init__.py`
+  - Exports the new radial, integral, volume-matrix, and TOML solve APIs.
+- `README.md`, `docs/*`, `SPECTRE_MIGRATION_PLAN.md`
+  - Updated to state that packaged `dMA/dMD` matrix parity is no longer limited by toroidal axis/generated-interface branches.
+  - Updated to describe the remaining blockers as transform/current diagnostics, nonlinear constraint updates, broader fixtures, and production sparse/matrix-free scaling.
+
+What worked:
+
+- Cylindrical `G2V32L1Fi` `dMA/dMD` parity now holds at roundoff for all packaged volumes; worst checked relative error was about `1.9e-14`.
+- Toroidal generated-interface fixed-boundary `G3V3L3Fi` and `G3V3L2Fi_stability` parity now holds at roundoff after implementing centroid `rzaxis`; worst checked relative error was about `5.5e-15`.
+- Explicit-interface free-boundary `G3V8L3Free` parity now holds at roundoff for all plasma volumes and the vacuum exterior block after recomputing the toroidal coordinate axis; worst checked relative error was about `3.4e-14`.
+- The previous `G3V8L3Free/lvol1` `dMA` mismatch of roughly `2.2e-2` relative error was traced to SPECTRE recomputing the coordinate axis during geometry unpacking even when the TOML file contains a positive `Rac(0)`. Replacing the stale input axis with centroid `rzaxis` brings the matrix to roundoff parity.
+- `solve_spectre_volume_from_input` now demonstrates direct TOML/interface-geometry assembly, local solve, and `Ate/Aze/Ato/Azo` unpacking. Exact comparison to post-constraint SPECTRE fixtures still requires passing SPECTRE's final `mu`/flux vector until the nonlinear diagnostic loop is ported.
+
+Verification:
+
+- `./.venv/bin/python -m pytest`
+  - `105 passed in 140.92s`
+  - total coverage `91.71%`
+
+Design decisions:
+
+- The public TOML solve helper defaults to the normalized TOML initial `mu` and `dtflux/dpflux` state. For fixture parity, it accepts explicit post-constraint `mu` and `psi` values because SPECTRE mutates those during local nonlinear solves.
+- Free-boundary exact `dMG` parity still supports explicit `SpectreBoundaryNormalField` input because final free-boundary normal-field arrays are Picard-updated state, not pure TOML input.
+- The matrix-integral implementation performs direct angular products. This is simpler to review than duplicating SPECTRE's FFT work arrays and still validates against SPECTRE's final matrices at roundoff for the packaged branches.
+
+What remains:
+
+- Implement JAX-native rotational-transform and plasma-current diagnostics from solved fields.
+- Connect those diagnostics to the existing `Lconstraint` residual/Jacobian layer so `mu` and flux updates no longer require injection from SPECTRE.
+- Add broader non-stellarator-symmetric and higher-resolution 3D SPECTRE fixtures.
+- Add sparse or matrix-free production solve paths once dense parity remains stable.
+- Use the SPECTRE fork only after diagnostics and nonlinear updates are complete, keeping SPECTRE-side changes small.
+
+## 25. 2026-04-30 Addendum: Full SPECTRE TOML-to-Coefficient Entry Point
+
+Goal of this lane:
+
+- Continue the "remove SPEC/SPECTRE assembly from the Beltrami path" direction without opening a SPECTRE PR yet.
+- Turn the per-volume TOML solve into a practical integration API that returns one full SPECTRE-compatible vector-potential block.
+- Add a standalone example and static validation figure for the reviewer-facing "TOML/interface geometry -> JAX assembly -> JAX solve -> Ate/Aze/Ato/Azo" workflow.
+
+Files added:
+
+- `examples/spectre_toml_full_solve.py`
+  - Loads packaged `G3V3L3Fi` SPECTRE TOML metadata.
+  - Injects packaged post-constraint `mu`/`psi` only for strict fixture validation.
+  - Calls the new multi-volume solve API.
+  - Writes `jax_vector_potential.npz`, JSON summaries, and a three-panel coefficient/residual parity figure.
+
+Files modified:
+
+- `src/beltrami_jax/spectre_solve.py`
+  - Adds `SpectreMultiVolumeSolve`.
+  - Adds `solve_spectre_volumes_from_input` for selected or all packed volumes.
+  - Adds `solve_spectre_toml` as a file-path convenience wrapper.
+  - Keeps explicit `mu`/`psi` overrides because exact post-constraint parity still needs SPECTRE's final branch state until transform/current diagnostics and nonlinear updates are ported.
+- `src/beltrami_jax/__init__.py`
+  - Exports the new multi-volume solve API.
+- `tests/test_spectre_volume_matrix.py`
+  - Adds full TOML-to-`Ate/Aze/Ato/Azo` validation for all packed `G3V3L3Fi` volumes.
+- `README.md`, `docs/examples.md`, `docs/integration.md`, `docs/overview.md`, `docs/theory.md`, `docs/validation.md`, `docs/limitations.md`
+  - Document the new user-facing full-case solve path and its validation boundary.
+- `docs/_static/spectre_toml_full_solve.png`
+- `docs/_static/spectre_toml_full_solve_summary.json`
+  - Static reviewer-facing outputs generated by the new example.
+
+What worked:
+
+- The multi-volume path reconstructs the complete `G3V3L3Fi` vector-potential block from SPECTRE TOML/interface geometry plus post-constraint branch state.
+- The generated validation panel reports global relative coefficient error `1.685e-14`.
+- The maximum relative linear residual across the three packed volumes is `7.089e-13`.
+- The standalone example prints progress for every volume and writes reproducible artifacts.
+
+Verification:
+
+- `./.venv/bin/python -m pytest tests/test_spectre_volume_matrix.py -o addopts='' -q`
+  - `10 passed in 104.17s`
+- `./.venv/bin/python -m pytest`
+  - `106 passed in 185.21s`
+  - total coverage `90.92%`
+- `./.venv/bin/python -m sphinx -W --keep-going -b html docs docs/_build/html`
+  - strict docs build passed
+- `rm -rf dist build && ./.venv/bin/python -m build`
+  - source distribution and wheel built successfully
+- `./.venv/bin/python examples/spectre_toml_full_solve.py`
+  - completed successfully
+  - wrote `examples/_generated/spectre_toml_full_solve/jax_vector_potential.npz`
+  - wrote `docs/_static/spectre_toml_full_solve.png`
+
+Current next lane:
+
+- Implement JAX-native plasma-current diagnostics from solved SPECTRE coefficients and interface metrics.
+- Then implement the rotational-transform diagnostic or an explicitly scoped first subset.
+- Feed diagnostics into the existing `Lconstraint` residual/Jacobian and add a local Newton loop so the public TOML solve no longer needs post-constraint `mu`/`psi` injection.

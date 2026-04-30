@@ -121,6 +121,9 @@ Current supported use:
 - compare fresh SPECTRE coefficient exports against `reference.h5`
 - evaluate SPECTRE `allrzrz`/wall interface geometry in JAX, including volume interpolation, Jacobian, and metric tensor
 - assemble SPECTRE `matrixBG` boundary terms `dMB/dMG` from packed maps plus TOML or updated normal-field arrays
+- assemble SPECTRE `dMA/dMD/dMB/dMG` volume matrices directly from TOML/interface geometry for the packaged validated branches
+- solve one SPECTRE volume from TOML/interface geometry and unpack directly to `Ate/Aze/Ato/Azo` with `solve_spectre_volume_from_input`
+- solve all packed SPECTRE volumes from TOML/interface geometry and return one full vector-potential block with `solve_spectre_volumes_from_input`
 - load packaged public SPECTRE compare cases for reproducible CI validation
 - reconstruct SPECTRE's internal Fourier mode order and packed radial block layout
 - pack and unpack SPECTRE-compatible per-volume solution vectors to/from `Ate`, `Aze`, `Ato`, and `Azo`
@@ -152,6 +155,12 @@ Current safe entry points:
 - `build_spectre_boundary_normal_field`
 - `assemble_spectre_matrix_bg`
 - `assemble_spectre_matrix_bg_from_input`
+- `assemble_spectre_matrix_ad_from_input`
+- `assemble_spectre_volume_matrices_from_input`
+- `spectre_volume_flux_vector`
+- `solve_spectre_volume_from_input`
+- `solve_spectre_volumes_from_input`
+- `solve_spectre_toml`
 - `spectre_fourier_modes`
 - `list_packaged_spectre_cases`
 - `load_packaged_spectre_case`
@@ -234,6 +243,44 @@ This is intentionally separated from the JAX-native assembly work. It validates
 the coefficient layout, HDF5 orientation, free-boundary update convention, and
 comparison metrics that the replacement backend must reproduce.
 
+## SPECTRE TOML-to-coefficients workflow
+
+The highest-level linear SPECTRE path currently starts from a SPECTRE TOML
+summary and returns a full SPECTRE-compatible vector-potential coefficient
+block:
+
+```python
+from beltrami_jax import load_spectre_input_toml, solve_spectre_volumes_from_input
+
+summary = load_spectre_input_toml("/path/to/input.toml")
+result = solve_spectre_volumes_from_input(summary, verbose=True)
+
+print(result.vector_potential.ate.shape)
+print(float(result.max_relative_residual_norm))
+```
+
+For exact validation against a completed SPECTRE run, pass the post-constraint
+branch state:
+
+```python
+from beltrami_jax import load_packaged_spectre_case, load_packaged_spectre_linear_system
+
+case = load_packaged_spectre_case("G3V3L3Fi")
+mu = {}
+psi = {}
+for lvol in range(1, case.input_summary.packed_volume_count + 1):
+    fixture = load_packaged_spectre_linear_system(case_label=case.label, volume_index=lvol)
+    mu[lvol] = fixture.system.mu
+    psi[lvol] = fixture.system.psi
+
+result = solve_spectre_volumes_from_input(case.input_summary, mu=mu, psi=psi)
+```
+
+The explicit `mu`/`psi` injection is a validation bridge, not the desired final
+SPECTRE contract. The remaining backend work is to compute the transform/current
+diagnostics and nonlinear updates directly in JAX so this call can reproduce the
+post-constraint state from TOML alone.
+
 ## SPECTRE pack/unpack workflow
 
 SPECTRE stores one vector-potential coefficient array per component, but the
@@ -302,8 +349,80 @@ normal_field = SpectreBoundaryNormalField(
 matrix_bg = assemble_spectre_matrix_bg(dof_layout.volume_maps[lvol - 1], normal_field)
 ```
 
-This closes the `dMB/dMG` assembly lane. The remaining SPECTRE assembly
-blocker is the volume-integral construction of `dMA/dMD`.
+This closes the `dMB/dMG` assembly lane.
+
+## SPECTRE `dMA/dMD` volume-matrix assembly workflow
+
+The next SPECTRE Fortran-removal ingredient is also available for the
+validated branches: radial basis/quadrature, metric-integral assembly, and the
+`matrices_mod.F90::matrix` contraction into `dMA/dMD`.
+
+```python
+from beltrami_jax import (
+    assemble_spectre_matrix_ad_from_input,
+    assemble_spectre_volume_matrices_from_input,
+    load_spectre_input_toml,
+)
+
+summary = load_spectre_input_toml("input.toml")
+
+# dMA/dMD only
+matrix_ad = assemble_spectre_matrix_ad_from_input(summary, lvol=2)
+print(matrix_ad.d_ma.shape, matrix_ad.d_md.shape)
+
+# dMA/dMD plus matrixBG's dMB/dMG
+matrices = assemble_spectre_volume_matrices_from_input(summary, lvol=2)
+print(matrices.d_ma.shape, matrices.d_mb.shape)
+```
+
+The current exact-parity tests cover:
+
+- cylindrical `Igeometry=2` coordinate-singularity and bulk volumes generated from `Linitialize=1` TOML data
+- toroidal `Igeometry=3` generated-interface volumes using SPECTRE-compatible centroid `rzaxis` axis initialization
+- explicit-interface free-boundary non-axis volumes from `physics.allrzrz`
+- explicit-interface free-boundary coordinate-axis volumes where SPECTRE recomputes the axis during geometry unpacking
+- the free-boundary exterior/vacuum volume
+- a TOML-driven solve/unpack path where JAX-assembled matrices reproduce a packaged SPECTRE `Ate/Aze/Ato/Azo` block when supplied the same solved branch `mu` and flux vector used by SPECTRE
+
+The important remaining backend gaps are no longer the packaged `dMA/dMD`
+matrix branches. They are the field diagnostics and nonlinear constraint
+updates needed to obtain final SPECTRE `mu`/flux values without injecting them
+from a SPECTRE run, plus broader non-stellarator-symmetric fixture coverage.
+
+## SPECTRE TOML-to-coefficients volume solve
+
+For a supported branch, `solve_spectre_volume_from_input` performs the local
+replacement workflow: read a `SpectreInputSummary`, assemble all four matrix
+ingredients, solve the local linear system, and unpack the result to
+SPECTRE-compatible `Ate/Aze/Ato/Azo` arrays.
+
+```python
+from beltrami_jax import load_spectre_input_toml, solve_spectre_volume_from_input
+
+summary = load_spectre_input_toml("input.toml")
+result = solve_spectre_volume_from_input(summary, lvol=2, verbose=True)
+
+print(result.solution.shape)
+print(result.vector_potential.ate.shape)
+print(float(result.relative_residual_norm))
+```
+
+For exact validation against a completed SPECTRE run, pass the post-constraint
+`mu` and flux vector used by SPECTRE:
+
+```python
+result = solve_spectre_volume_from_input(
+    summary,
+    lvol=2,
+    mu=spectre_mu,
+    psi=(spectre_dtflux, spectre_dpflux),
+)
+```
+
+Without those overrides, the helper uses the normalized TOML initial state. That
+is the right user-facing default, but it will not reproduce a post-Newton
+SPECTRE fixture until the JAX transform/current diagnostics and nonlinear
+constraint loop are complete.
 
 ## SPECTRE linear-system validation workflow
 
@@ -325,12 +444,11 @@ print(float(result.relative_residual_norm))
 ```
 
 This workflow validates the linear algebra and branch-specific RHS assembly
-after SPECTRE's Fortran geometry assembly has run. It does not yet remove
-SPECTRE's Fortran assembly path. The final integration lane is to replace the
-upstream construction of `dMA` and `dMD` with JAX-native SPECTRE
-interface-geometry assembly, then combine those matrices with the JAX-native
-`matrixBG` `dMB/dMG` path and unpack the solved vectors through the existing
-SPECTRE `Ate/Aze/Ato/Azo` maps.
+after SPECTRE's Fortran geometry assembly has run. For the branches listed
+above, the upstream construction of `dMA`, `dMD`, `dMB`, and `dMG` can now be
+done by `beltrami_jax`; the remaining integration lane is to compute
+transform/current diagnostics from solved JAX fields and drive the nonlinear
+constraint updates without asking SPECTRE for final `mu`/flux metadata.
 
 ## SPECTRE interface-geometry workflow
 
@@ -365,10 +483,8 @@ Implemented at this layer:
 - Linear interpolation between neighboring interfaces for non-axis volumes.
 - First derivatives, Jacobian, inverse Jacobian, and covariant metric tensor.
 
-This still stops before volume-integral matrix assembly. The next
-implementation step is to feed these metric quantities into the SPECTRE/SPEC
-`matrix`/`intghs` integral formulas to produce `dMA` and `dMD` without
-Fortran; `dMB/dMG` are already covered by the `matrixBG` port above.
+This geometry layer now feeds the SPECTRE radial/metric-integral and
+`dMA/dMD` contraction path described above for the validated branches.
 
 ## SPECTRE branch/constraint workflow
 
@@ -452,6 +568,6 @@ Performance notes:
 
 ## Current boundary
 
-The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, SPECTRE `matrixBG` boundary assembly, and SPECTRE local branch/constraint models, but it is still not a full SPECTRE backend. The main remaining work is JAX-native SPECTRE `dMA/dMD` volume-integral assembly and field diagnostics that produce transform/current constraints directly from solved JAX fields.
+The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, SPECTRE matrix assembly, TOML-driven per-volume coefficient solves, and SPECTRE local branch/constraint models, but it is still not a full SPECTRE backend. The main remaining work is field diagnostics that produce transform/current constraints directly from solved JAX fields and the nonlinear update loop that removes final `mu`/flux injection.
 
 See the root-level `SPECTRE_MIGRATION_PLAN.md` for the current SPECTRE replacement plan.

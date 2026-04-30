@@ -57,6 +57,10 @@ The SPECTRE interface-geometry evaluator generates a geometry/Jacobian/metric pr
 
 ![SPECTRE geometry probe](_static/spectre_geometry_probe.png)
 
+The SPECTRE TOML full-solve path generates a full coefficient reconstruction panel:
+
+![SPECTRE TOML full solve](_static/spectre_toml_full_solve.png)
+
 These figures summarize:
 
 - coefficient-level agreement between SPEC and `beltrami_jax`
@@ -69,6 +73,7 @@ These figures summarize:
 - SPECTRE `dMA`, `dMD`, `dMB`, `dMG`, matrix, RHS, and solved degree-of-freedom parity for released SPECTRE volume solves
 - SPECTRE interface geometry, Jacobian, and metric tensor evaluation from packaged TOML input
 - SPECTRE `matrixBG` `dMB/dMG` boundary assembly parity for fixed-boundary fixtures and exact updated-normal-field source parity for all packaged fixtures
+- full SPECTRE TOML/interface-geometry assembly, solve, unpack, and coefficient comparison for all packed `G3V3L3Fi` volumes
 
 Release-gate example outputs generated from the current source tree:
 
@@ -164,6 +169,11 @@ The test suite verifies:
 - `evaluate_spectre_volume_coordinates` is tested for finite Jacobian/metric values, metric symmetry, and JAX autodiff through the radial interpolation coordinate.
 - `build_spectre_boundary_normal_field` reconstructs SPECTRE's initialized `iVns/iBns/iVnc/iBnc` normal-field arrays from TOML tables.
 - `assemble_spectre_matrix_bg` and `assemble_spectre_matrix_bg_from_input` reproduce SPECTRE `matrixBG` `dMB/dMG` for fixed-boundary public fixtures; for the free-boundary fixture the TOML-only path is tested as the initial source and the updated-normal-field path reproduces the packaged post-Picard fixture exactly.
+- `chebyshev_basis`, `zernike_basis`, and `zernike_axis_basis` mirror SPECTRE radial basis recombination, including the `get_zernike_rm` axis multiplier branch.
+- `assemble_spectre_matrix_ad_from_input` reproduces SPECTRE `dMA/dMD` for validated cylindrical coordinate-singularity/bulk volumes, toroidal generated-interface volumes, explicit-interface free-boundary volumes, and the free-boundary vacuum volume.
+- `build_spectre_interface_geometry` includes SPECTRE-compatible centroid `rzaxis` handling for the covered toroidal coordinate-axis cases.
+- `solve_spectre_volume_from_input` is tested in a TOML-driven solve/unpack path that returns the same SPECTRE vector-potential block when supplied the same post-constraint branch `mu` and flux vector used by SPECTRE.
+- `solve_spectre_volumes_from_input` is tested in a full TOML-to-`Ate/Aze/Ato/Azo` path that reconstructs all packed `G3V3L3Fi` coefficients with global relative error `1.69e-14` when supplied the same post-constraint branch state used by SPECTRE.
 
 Current public SPECTRE compare-case results:
 
@@ -219,6 +229,8 @@ Current released-SPECTRE linear parity:
 - branch-solve primary residuals: below `1e-11` for all packaged fixtures, including the ill-conditioned compact free-boundary axis volume
 - `matrixBG` fixed-boundary `dMB/dMG` parity: exact for all packaged fixed-boundary fixtures
 - `matrixBG` updated-normal-field `dMB/dMG` parity: exact for all 19 packaged released-SPECTRE fixtures
+- JAX-native `dMA/dMD` parity: roundoff-level agreement for all packaged cylindrical, toroidal fixed-boundary, explicit-interface free-boundary, and vacuum volumes
+- TOML-driven assembled solve/unpack parity: validated volume solves reproduce packaged SPECTRE solution vectors and `Ate/Aze/Ato/Azo` coefficient blocks when supplied SPECTRE's solved `mu` and flux vector
 
 Programmatic access:
 
@@ -252,7 +264,7 @@ This validates the branch contract before the JAX-native field diagnostic layer 
 The repository enforces a coverage threshold in `pyproject.toml`:
 
 - required line coverage: at least 90%
-- current release-gate result: `96 passed` with `93.23%` line coverage
+- current release-gate result: see the root README and CI badge for the latest count; the enforced threshold remains 90%
 
 ## Known validation gaps
 
@@ -261,11 +273,10 @@ The current validation is strong for the implemented regression and internal-wor
 Remaining validation work includes:
 
 - comparisons against later SPECTRE integration points beyond exported matrix/RHS/solution fixtures
-- JAX-native generation of SPECTRE HDF5 vector-potential coefficients `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`
-- JAX-native assembly of SPECTRE `dMA` and `dMD` from the new geometry/metric layer
+- final-state SPECTRE HDF5 vector-potential coefficient generation without injecting post-constraint SPECTRE `mu`/flux values
 - JAX-native transform/current diagnostics from solved fields rather than injected diagnostic arrays
 - broader 3D fixture coverage closer to anticipated SPECTRE use cases
-- end-to-end SPECTRE fork integration once matrix assembly and diagnostics are complete
+- end-to-end SPECTRE fork integration once diagnostics and nonlinear updates are complete
 
 ## Why exact dense regression matters
 

@@ -155,7 +155,7 @@ C_{mn}(s) = C_{mn}^{\mathrm{axis}}
 $$
 
 The resulting coordinate derivatives build the Jacobian and metric tensor used
-by the future SPECTRE matrix integrals. For toroidal geometry,
+by the SPECTRE matrix integrals. For toroidal geometry,
 
 $$
 J = R\left(Z_s R_\theta - R_s Z_\theta\right),
@@ -169,9 +169,36 @@ g_{\zeta\zeta}
 = R_\zeta^2 + Z_\zeta^2 + R^2.
 $$
 
-The current JAX implementation covers this interface-geometry layer. It still
-does not assemble SPECTRE's `dMA` and `dMD` volume-integral matrices from
-these metric quantities.
+The current JAX implementation covers this interface-geometry layer and the
+first SPECTRE `dMA/dMD` matrix-integral path for the validated branches.
+
+## SPECTRE volume-matrix integrals
+
+SPECTRE's `chebyshev_mod.F90::volume_integrate_chebyshev` builds tensors such
+as
+
+$$
+DToocc_{\ell p i j}
+=
+\int_{-1}^{1} ds\, T'_{\ell i}(s)\,T_{p j}(s)
+\int d\theta\,d\zeta\,\cos\alpha_i\,\cos\alpha_j,
+$$
+
+and
+
+$$
+TTssss_{\ell p i j}
+=
+\int_{-1}^{1} ds\, T_{\ell i}(s)\,T_{p j}(s)
+\int d\theta\,d\zeta\,\sin\alpha_i\,\sin\alpha_j\,
+\frac{g_{ss}}{\sqrt{g}},
+$$
+
+with analogous `TDst*`, `TDsz*`, `DDtt*`, `DDtz*`, and `DDzz*` tensors for
+the other metric components and radial derivative combinations. The JAX path
+evaluates the same integrals directly on SPECTRE's angular grid and
+Gauss-Legendre radial quadrature, then contracts them with the packed
+`Ate/Aze/Ato/Azo` maps in `matrices_mod.F90::matrix` form.
 
 ## SPECTRE `matrixBG` boundary assembly
 
@@ -336,9 +363,11 @@ The repository now covers the supported Beltrami workflow end to end:
 
 - internal geometry/integral assembly for a Fourier large-aspect-ratio torus
 - SPECTRE interface-Fourier coordinate interpolation, Jacobian, and metric evaluation
+- SPECTRE radial basis/quadrature, metric-integral tensors, and `dMA/dMD` matrix contraction for packaged cylindrical, toroidal, free-boundary, and vacuum branches
+- SPECTRE TOML-to-volume and TOML-to-full-coefficient solves that unpack directly to `Ate/Aze/Ato/Azo` for validated branches when supplied the same post-constraint state used by SPECTRE
 - dense and GMRES linear solves
 - SPECTRE local branch derivative solves and `Lconstraint` residual/Jacobian formulas with injected diagnostics
 - a helicity-constrained outer update for `mu`
 - axis-regularized basis handling near the coordinate singularity
 
-What still remains outside the current implementation is exact JAX-native SPECTRE matrix assembly and field diagnostics from the interface geometry, including the auxiliary integral terms needed to produce `Ate/Aze/Ato/Azo` directly without SPECTRE assembly.
+What still remains outside the current implementation is field diagnostics from the interface geometry, including rotational transform/current evaluation and the nonlinear updates needed to produce final `Ate/Aze/Ato/Azo` directly without injected SPECTRE solve metadata.

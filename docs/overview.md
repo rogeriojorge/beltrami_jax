@@ -29,9 +29,9 @@ The package currently supports four complementary workflows:
 - dumped SPEC regression, where the geometry-dependent matrices are loaded from a SPEC export
 - internal Fourier-geometry prototype assembly, where `beltrami_jax` builds matrices for a shaped large-aspect-ratio torus and then runs the same solve machinery
 - released SPECTRE validation, where TOML/HDF5 coefficient fixtures and per-volume matrix/RHS/solution fixtures are loaded from packaged public compare cases
-- SPECTRE interface-geometry evaluation, where `physics.allrzrz` and free-boundary wall Fourier tables are converted into JAX arrays and evaluated with SPECTRE's radial interpolation rules
+- SPECTRE interface-geometry and matrix assembly, where TOML Fourier interfaces, free-boundary wall tables, radial bases, metric integrals, and SPECTRE volume matrices are assembled in JAX
 
-The SPEC and SPECTRE fixture workflows are the current parity-oriented paths. The internal geometry workflow is a development and demonstration path. It is not yet a replacement for SPECTRE's full 3D interface-geometry assembly.
+The SPEC and SPECTRE fixture workflows are the current parity-oriented paths. The internal geometry workflow is a development and demonstration path. The SPECTRE path is now the intended replacement route for the Beltrami matrix/linear-solve stage, with remaining work focused on field diagnostics and nonlinear constraint updates.
 
 The package currently provides:
 
@@ -83,6 +83,14 @@ The package currently provides:
   - provide the first JAX-native SPECTRE interface-geometry layer: Fourier interfaces, volume interpolation, coordinates, Jacobian, and metric tensor
 - `build_spectre_boundary_normal_field`, `assemble_spectre_matrix_bg`, `assemble_spectre_matrix_bg_from_input`
   - port SPECTRE `matrixBG`, producing `dMB` and `dMG` from packed maps plus TOML or updated normal-field arrays
+- `chebyshev_basis`, `zernike_basis`, `assemble_spectre_metric_integrals_from_input`, `assemble_spectre_matrix_ad_from_input`
+  - port the SPECTRE radial basis, metric-integral, and `dMA/dMD` matrix-contraction path for the packaged cylindrical, toroidal, free-boundary, and vacuum branches
+- `assemble_spectre_volume_matrices_from_input`
+  - assembles `dMA`, `dMD`, `dMB`, and `dMG` for one SPECTRE volume directly from TOML/interface geometry when the branch is supported
+- `solve_spectre_volume_from_input`
+  - assembles one SPECTRE volume, solves it, and unpacks directly to `Ate/Aze/Ato/Azo`
+- `solve_spectre_volumes_from_input`, `solve_spectre_toml`
+  - solve selected or all packed SPECTRE volumes from TOML/interface geometry and concatenate a full `Ate/Aze/Ato/Azo` coefficient block
 - `save_problem_json`, `load_problem_json`, `save_nonlinear_solution`
   - handle user-facing input and output files for standalone workflows
 
@@ -128,9 +136,9 @@ The example scripts print progress and diagnostics. This is intentional. The goa
 This package now performs prototype internal geometry assembly, Krylov solves, and a helicity-constrained outer loop, but it still does not cover:
 
 - every SPEC/SPECTRE branch and auxiliary matrix path
-- SPECTRE's exact `dMA/dMD` volume-integral assembly
-- JAX-native HDF5 vector-potential coefficient generation matching `Ate`, `Aze`, `Ato`, and `Azo`
-- JAX-native generation of complete released SPECTRE linear-system matrices from TOML/interface geometry
+- SPECTRE transform/current diagnostics from solved JAX fields
+- the outer nonlinear SPECTRE constraint loop that updates `mu` and fluxes without injected SPECTRE metadata
+- broader non-stellarator-symmetric and high-resolution fixture coverage
 - full sparse production scaling
 - the broader equilibrium and constraint machinery beyond the supported Beltrami workflow
 

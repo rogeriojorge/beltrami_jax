@@ -32,6 +32,7 @@ The main implementation files are:
 - `src/beltrami_jax/io.py`
 - `src/beltrami_jax/reference.py`
 - `src/beltrami_jax/spectre_input.py`
+- `src/beltrami_jax/spectre_backend.py`
 - `src/beltrami_jax/spectre_io.py`
 - `src/beltrami_jax/spectre_layout.py`
 - `src/beltrami_jax/spectre_linear.py`
@@ -114,6 +115,14 @@ These are the files to read if you want to understand how the package maps geome
 ```{eval-rst}
 .. automodule:: beltrami_jax.spectre_input
    :members:
+```
+
+## SPECTRE backend adapter
+
+```{eval-rst}
+.. automodule:: beltrami_jax.spectre_backend
+   :members:
+   :exclude-members: Array, ArrayLike
 ```
 
 ## SPECTRE HDF5 vector-potential IO

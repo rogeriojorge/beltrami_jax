@@ -5,7 +5,7 @@ The repository includes executable examples under `examples/`. They are designed
 - standalone scripts with parameters at the top
 - verbose in the terminal
 - capable of writing inputs, outputs, and figures under `examples/_generated/`
-- representative of both dumped-SPEC and internal-assembly workflows
+- representative of dumped-SPEC, SPECTRE-adapter, and internal-assembly workflows
 
 ## Solve the packaged SPEC fixture
 
@@ -108,6 +108,26 @@ This example:
 Committed SPECTRE parity figure:
 
 ![SPECTRE vector-potential parity](_static/spectre_vecpot_parity.png)
+
+## SPECTRE assembled-matrix backend adapter
+
+Run:
+
+```bash
+./.venv/bin/python examples/spectre_backend_dropin.py
+```
+
+This example:
+
+- loads packaged released-SPECTRE per-volume linear systems
+- calls `solve_spectre_assembled_numpy`, the minimal adapter intended for a small SPECTRE-side Python branch
+- solves a batch of equal-size SPECTRE plasma volumes with `solve_spectre_assembled_batch`
+- records compile+solve and steady-state adapter timings
+- writes a JSON summary and panel under `examples/_generated/spectre_backend_dropin/`
+
+Committed SPECTRE linear parity figure:
+
+![SPECTRE linear-system parity](_static/spectre_linear_parity.png)
 
 ## Regenerate the committed validation panels
 

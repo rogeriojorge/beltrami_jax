@@ -72,6 +72,8 @@ The package currently provides:
   - loads packaged public SPECTRE compare cases for reproducible coefficient-target tests
 - `load_packaged_spectre_linear_system`
   - loads packaged released-SPECTRE matrix/RHS/solution fixtures for linear-solve parity tests
+- `solve_spectre_assembled_numpy`
+  - provides the minimal NumPy-returning SPECTRE adapter for already assembled Beltrami matrices
 - `save_problem_json`, `load_problem_json`, `save_nonlinear_solution`
   - handle user-facing input and output files for standalone workflows
 

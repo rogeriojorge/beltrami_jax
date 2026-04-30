@@ -123,6 +123,7 @@ Current supported use:
 - reconstruct SPECTRE's internal Fourier mode order and packed radial block layout
 - pack and unpack SPECTRE-compatible per-volume solution vectors to/from `Ate`, `Aze`, `Ato`, and `Azo`
 - load released SPECTRE per-volume Beltrami linear systems and solve them with JAX
+- call a narrow JIT-backed backend adapter for already assembled SPECTRE Beltrami matrices
 - use the comparison tooling as the target contract for the future JAX-native backend
 
 Intended future use:
@@ -146,6 +147,9 @@ Current safe entry points:
 - `load_packaged_spectre_case`
 - `list_packaged_spectre_linear_systems`
 - `load_packaged_spectre_linear_system`
+- `solve_spectre_assembled`
+- `solve_spectre_assembled_numpy`
+- `solve_spectre_assembled_batch`
 
 Prototype-only entry points:
 
@@ -273,6 +277,46 @@ SPECTRE's Fortran assembly path. The final integration lane is to replace the
 upstream construction of `dMA`, `dMD`, `dMB`, and `dMG` with JAX-native
 SPECTRE interface-geometry assembly, then unpack the solved vectors through the
 existing SPECTRE `Ate/Aze/Ato/Azo` maps.
+
+## Minimal SPECTRE backend adapter
+
+The smallest safe SPECTRE-side change is a thin optional adapter after SPECTRE
+has already assembled `dMA`, `dMD`, `dMB`, and `dMG`. It should not change
+SPECTRE's geometry representation, quadrature, matrix assembly, or default
+Fortran backend.
+
+The adapter call looks like this on the Python side:
+
+```python
+from beltrami_jax import solve_spectre_assembled_numpy
+
+result = solve_spectre_assembled_numpy(
+    d_ma=d_ma,
+    d_md=d_md,
+    d_mb=d_mb,
+    d_mg=d_mg,
+    mu=mu,
+    psi=(delta_psi_t, delta_psi_p),
+    is_vacuum=is_vacuum,
+    include_d_mg_in_rhs=is_vacuum or coordinate_singularity_current_constraint,
+)
+solution = result["solution"]
+relative_residual_norm = result["relative_residual_norm"]
+```
+
+Recommended SPECTRE-side patch size:
+
+- Add one experimental option such as `beltrami_backend = "fortran" | "jax"`, with `"fortran"` as the default.
+- Add one Python helper that converts the already assembled Fortran arrays to NumPy views/copies and calls `solve_spectre_assembled_numpy`.
+- Copy the returned solution vector into the same SPECTRE solution slot that `solve_beltrami_system` fills today.
+- Keep all existing Fortran branches, diagnostics, and tests active as the fallback path.
+
+Performance notes:
+
+- The core solve is JIT compiled by shape and branch flags.
+- Repeated calls with the same active degree-of-freedom count reuse the compiled solve.
+- `solve_spectre_assembled_batch` can solve equal-size volumes together when SPECTRE has multiple volumes with the same branch flags.
+- No absolute runtime threshold is hard-coded in CI because GitHub-hosted CPU timing is noisy; tests validate parity, residuals, batching, NumPy adapter behavior, and timing-helper behavior.
 
 ## Current boundary
 

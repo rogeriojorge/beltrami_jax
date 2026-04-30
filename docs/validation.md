@@ -151,6 +151,8 @@ The test suite verifies:
 - The four public SPECTRE compare cases are packaged under `src/beltrami_jax/data/spectre_compare/`.
 - `tools/generate_spectre_validation_assets.py --use-packaged` compares those packaged fresh exports against packaged SPECTRE `reference.h5` files and writes the committed parity figure.
 - Omitting `--use-packaged` compares against a local SPECTRE checkout and local fresh exports when those are present.
+- `solve_spectre_assembled_numpy` is tested as the thin adapter that SPECTRE can call once it has already assembled one Beltrami linear system.
+- `solve_spectre_assembled_batch` is tested on equal-size SPECTRE plasma volumes so repeated same-shape solves have a vectorized path.
 
 Current public SPECTRE compare-case results:
 
@@ -201,6 +203,7 @@ Current released-SPECTRE linear parity:
 - RHS relative error: exactly `0.0` for all packaged fixtures
 - worst solution relative error: `1.59e-15`
 - worst JAX relative residual norm: `2.56e-12`
+- backend adapter solution parity: below `3e-12` for all packaged fixtures
 
 Programmatic access:
 
@@ -222,7 +225,7 @@ for name in list_packaged_spectre_linear_systems():
 The repository enforces a coverage threshold in `pyproject.toml`:
 
 - required line coverage: at least 90%
-- current release-gate result: `58 passed` with `94.32%` line coverage
+- current release-gate result: `67 passed` with `94.48%` line coverage
 
 ## Known validation gaps
 

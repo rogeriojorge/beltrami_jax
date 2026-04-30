@@ -15,9 +15,9 @@ The repository currently covers three complementary paths:
 
 The assembled-system and SPECTRE fixture paths are the current scientifically relevant validation paths. The internal geometry prototype is useful for development and examples, but it is not yet SPECTRE's full arbitrary 3D Fourier-interface geometry assembly.
 
-This is not yet a full SPECTRE Beltrami backend. SPECTRE TOML input summaries, HDF5 vector-potential coefficient validation, packed radial block layout, SPECTRE-compatible solution-vector pack/unpack maps, and packaged SPECTRE matrix/RHS/solution fixtures are implemented. Exact JAX-native SPECTRE interface-geometry assembly and full local-constraint branch parity remain the core replacement work documented in [SPECTRE_MIGRATION_PLAN.md](/Users/rogerio/local/beltrami_jax/SPECTRE_MIGRATION_PLAN.md).
+This is not yet a full SPECTRE Beltrami backend. SPECTRE TOML input summaries, HDF5 vector-potential coefficient validation, packed radial block layout, SPECTRE-compatible solution-vector pack/unpack maps, and packaged SPECTRE matrix/RHS/solution fixtures are implemented. Exact JAX-native SPECTRE interface-geometry assembly and full local-constraint branch parity remain the core replacement work documented in [SPECTRE_MIGRATION_PLAN.md](SPECTRE_MIGRATION_PLAN.md).
 
-The repository ships under the MIT License; see [LICENSE](/Users/rogerio/local/beltrami_jax/LICENSE).
+The repository ships under the MIT License; see [LICENSE](LICENSE).
 
 ## Motivation
 
@@ -81,6 +81,7 @@ Today the repository includes:
 - differentiable JAX scatter/gather pack/unpack helpers between SPECTRE coefficient arrays and per-volume solution vectors
 - packaged public SPECTRE compare cases for reproducible CI validation without a local SPECTRE checkout
 - packaged public SPECTRE per-volume Beltrami linear systems exported from `solve_beltrami_system`
+- a small JIT-backed SPECTRE backend adapter that consumes SPECTRE-assembled `dMA/dMD/dMB/dMG` arrays and returns solved vectors plus residual metrics
 - standalone example workflows that define geometries, write input files, run solves, save outputs, and generate figures
 - tests that cover dumped SPEC systems and the internal geometry-driven workflow
 
@@ -95,6 +96,8 @@ The SPECTRE-facing input layer now reads SPECTRE TOML files into `SpectreInputSu
 The SPECTRE packing layer now reconstructs SPECTRE's internal Fourier ordering and integer degree-of-freedom maps for every packed volume. It can pack coefficient arrays into the same per-volume solution-vector layout used by `packab('P', ...)`, unpack solved vectors back to `Ate/Aze/Ato/Azo`, and perform the same operations with JAX scatter/gather primitives for differentiable integration.
 
 The SPECTRE linear-system validation layer packages the dense `dMA`, `dMD`, `dMB`, `dMG`, final matrix, RHS, and solved SPECTRE degree-of-freedom vectors exported from released SPECTRE cases. These fixtures are developer validation assets: they prove the JAX linear solve matches SPECTRE once SPECTRE has assembled the system, but they are not the final user-facing SPECTRE input contract.
+
+The SPECTRE backend adapter is intentionally narrow. It does not ask SPECTRE to change geometry, quadrature, matrix assembly, or constraint setup. The first SPECTRE-side experiment can be a small optional branch that passes already assembled arrays to `solve_spectre_assembled_numpy`, copies the returned solution into SPECTRE's existing solution storage, and leaves the Fortran backend as the default fallback.
 
 Validation today has three levels:
 
@@ -163,14 +166,20 @@ Run the SPECTRE TOML/HDF5 vector-potential validation example:
 ./.venv/bin/python examples/validate_spectre_vector_potential.py
 ```
 
+Run the SPECTRE assembled-matrix backend adapter example:
+
+```bash
+./.venv/bin/python examples/spectre_backend_dropin.py
+```
+
 The example scripts are intentionally standalone. Each script keeps its input parameters at the top, writes files under `examples/_generated/`, prints progress to the terminal, and generates at least one figure or exported data product.
 
 ## Latest Release Checks
 
 Latest local release gate:
 
-- `58 passed in 23.15s`
-- `94.32%` total line coverage
+- `67 passed in 26.21s`
+- `94.48%` total line coverage
 - strict Sphinx build passed with `-W`
 - runtime code does not depend on `tomllib`, so Python `3.10+` support is not blocked by stdlib TOML parsing differences
 
@@ -180,7 +189,7 @@ Latest remote CI verification:
 - docs build passes
 - source and wheel builds pass
 
-The current CI workflow is defined in [.github/workflows/ci.yml](/Users/rogerio/local/beltrami_jax/.github/workflows/ci.yml).
+The current CI workflow is defined in [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ## Validation figures
 
@@ -333,6 +342,7 @@ from beltrami_jax import (
     load_spectre_reference_h5,
     load_spectre_vector_potential_npz,
     solve_from_components,
+    solve_spectre_assembled_numpy,
 )
 
 summary = load_spectre_input_toml("/path/to/spectre/input.toml")
@@ -346,6 +356,16 @@ solutions = dof_layout.pack_vector_potential(reference)
 roundtrip = dof_layout.unpack_solutions(solutions)
 linear_fixture = load_packaged_spectre_linear_system("G2V32L1Fi/lvol1")
 linear_result = solve_from_components(linear_fixture.system)
+backend_result = solve_spectre_assembled_numpy(
+    d_ma=linear_fixture.system.d_ma,
+    d_md=linear_fixture.system.d_md,
+    d_mb=linear_fixture.system.d_mb,
+    d_mg=linear_fixture.system.d_mg,
+    mu=linear_fixture.system.mu,
+    psi=linear_fixture.system.psi,
+    is_vacuum=linear_fixture.system.is_vacuum,
+    include_d_mg_in_rhs=linear_fixture.system.include_d_mg_in_rhs,
+)
 
 print(summary.lrad)
 print(comparison.global_relative_error)
@@ -353,6 +373,7 @@ print(packaged_case.comparison.global_relative_error)
 print(layout.blocks[0].radial_slice)
 print(dof_layout.solution_sizes)
 print(linear_fixture.relative_residual_norm, linear_result.relative_residual_norm)
+print(backend_result["relative_residual_norm"])
 ```
 
 The intended JAX-native replacement contract is:
@@ -363,8 +384,8 @@ The intended JAX-native replacement contract is:
 4. return packed coefficients and SPECTRE-compatible `Ate`, `Aze`, `Ato`, and `Azo` through the implemented SPECTRE degree-of-freedom maps
 5. consume the returned energies, helicities, residuals, and histories
 
-See the full integration notes in [docs/integration.md](/Users/rogerio/local/beltrami_jax/docs/integration.md).
-See the current SPECTRE replacement roadmap in [SPECTRE_MIGRATION_PLAN.md](/Users/rogerio/local/beltrami_jax/SPECTRE_MIGRATION_PLAN.md).
+See the full integration notes in [docs/integration.md](docs/integration.md).
+See the current SPECTRE replacement roadmap in [SPECTRE_MIGRATION_PLAN.md](SPECTRE_MIGRATION_PLAN.md).
 
 ## Generating new fixtures from SPEC
 
@@ -476,4 +497,4 @@ Read the Docs note:
 
 ## Project status
 
-This is an active build-out repository. The dense regression-tested kernel, diagnostics, benchmark tooling, validation figures, SPECTRE IO, and exact coefficient pack/unpack maps are in place. The next steps are JAX-native SPECTRE geometry/integral assembly, full constraint parity, broader SPECTRE fixture coverage, and integration-oriented backend APIs.
+This is an active build-out repository. The dense regression-tested kernel, diagnostics, benchmark tooling, validation figures, SPECTRE IO, exact coefficient pack/unpack maps, and a minimal assembled-matrix SPECTRE backend adapter are in place. The next steps are JAX-native SPECTRE geometry/integral assembly, full constraint parity, broader SPECTRE fixture coverage, and a small SPECTRE fork experiment using the adapter.

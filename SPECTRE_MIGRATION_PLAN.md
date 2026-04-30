@@ -20,6 +20,7 @@ What currently works:
 - It now compares fresh SPECTRE `get_vec_pot_flat` exports against public SPECTRE `reference.h5` files and generates a reviewer-facing parity figure.
 - It now reconstructs SPECTRE's Fourier mode order, per-volume coefficient id maps, and `packab`-compatible solution-vector layout for `Ate/Aze/Ato/Azo`.
 - It now packages released-SPECTRE per-volume Beltrami linear systems and validates JAX matrix/RHS/solution parity for 19 volume solves.
+- It now exposes a narrow SPECTRE backend adapter for already assembled `dMA/dMD/dMB/dMG` arrays, so the first SPECTRE-side experiment can be a small optional branch rather than a Fortran rewrite.
 
 What is not yet done:
 
@@ -102,6 +103,7 @@ Completed `beltrami_jax` work:
 - Generated `docs/_static/spectre_vecpot_parity.png`, showing worst global relative coefficient error `1.52e-14` across four public SPECTRE compare cases.
 - Added `tools/export_spectre_linear_system_npz.py`, `src/beltrami_jax/spectre_linear.py`, packaged fixtures under `src/beltrami_jax/data/spectre_linear/`, and `docs/_static/spectre_linear_parity.png`.
 - Current released-SPECTRE linear parity covers 19 volume solves with exact matrix/RHS reconstruction and worst solution relative error `1.59e-15`.
+- Added `src/beltrami_jax/spectre_backend.py` with JIT-backed `solve_spectre_assembled`, NumPy-returning `solve_spectre_assembled_numpy`, equal-size batched solves, and a lightweight timing helper.
 
 Required remaining `beltrami_jax` work:
 
@@ -606,6 +608,34 @@ Acceptance:
 
 - `beltrami_jax` solves SPECTRE-exported systems and matches matrix/RHS exactly and solved vectors to `1.59e-15` worst relative error across the current 19 packaged volume solves.
 - The remaining coefficient-level acceptance belongs to Phase 4/5: JAX-native SPECTRE geometry assembly must produce solved vectors that unpack to SPECTRE `Ate/Aze/Ato/Azo`.
+
+### Phase 3.5: Minimal SPECTRE Adapter Boundary
+
+Status: implemented on the `beltrami_jax` side.
+
+Goal: make the first SPECTRE fork change small, reversible, and easy to
+benchmark.
+
+Implemented `beltrami_jax` API:
+
+- `solve_spectre_assembled`: JAX-array result for one assembled SPECTRE system.
+- `solve_spectre_assembled_numpy`: NumPy-returning wrapper for a SPECTRE Python adapter.
+- `solve_spectre_assembled_batch`: vectorized equal-size volume solve path.
+- `benchmark_spectre_backend`: timing helper that measures compile+solve and steady-state calls without hard-coding a CI runtime budget.
+
+Recommended SPECTRE-side change:
+
+- Add one experimental option, for example `beltrami_backend = "fortran" | "jax"`, defaulting to `"fortran"`.
+- Keep all SPECTRE geometry, quadrature, matrix assembly, and branch setup unchanged.
+- In the experimental branch only, pass already assembled `dMA`, `dMD`, `dMB`, `dMG`, `mu`, `psi`, and branch flags to `solve_spectre_assembled_numpy`.
+- Copy the returned solution vector into the same SPECTRE solution storage that `solve_beltrami_system` fills.
+- Keep existing Fortran solve and tests as fallback until JAX-native assembly and coefficient parity are complete.
+
+Why this boundary:
+
+- It validates runtime behavior and packaging with minimal SPECTRE risk.
+- It isolates Python/JAX import and array-copy overhead from the much larger geometry-assembly port.
+- It gives a clean benchmark point: Fortran solve vs JAX solve for the exact same SPECTRE-assembled matrix.
 
 ### Phase 4: Port SPECTRE Assembly to JAX
 

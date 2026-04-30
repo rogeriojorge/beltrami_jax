@@ -1633,3 +1633,61 @@ Next best lane:
 - Keep the current plots for future PR material:
   - `docs/_static/spectre_vecpot_parity.png`
   - `docs/_static/spectre_linear_parity.png`
+
+## 21. 2026-04-30 Addendum: Minimal SPECTRE Backend Adapter
+
+Goal of this lane:
+
+- Create the smallest SPECTRE-facing runtime integration seam before touching SPECTRE core code.
+- Keep SPECTRE-side changes small: one optional backend flag, one Python helper, no geometry or matrix-assembly rewrite.
+- Make the JAX solve path high-performance enough to benchmark fairly by using JIT compilation, same-shape compile caching, and optional equal-size batching.
+
+Files added:
+
+- `src/beltrami_jax/spectre_backend.py`
+  - `solve_spectre_assembled`: solves one already assembled SPECTRE Beltrami system and returns JAX arrays.
+  - `solve_spectre_assembled_numpy`: returns NumPy arrays and Python floats for a thin SPECTRE Python adapter.
+  - `solve_spectre_assembled_batch`: solves equal-size same-branch SPECTRE systems in one vectorized JAX call.
+  - `benchmark_spectre_backend`: measures compile+solve and steady-state timings without enforcing a fragile absolute runtime budget in CI.
+  - Result dataclasses: `SpectreBackendSolve`, `SpectreBackendBatchSolve`, `SpectreBackendTiming`.
+- `tests/test_spectre_backend.py`
+  - Validates the adapter against all 19 packaged SPECTRE linear systems.
+  - Validates NumPy-returning adapter behavior.
+  - Validates equal-size batched volume solving.
+  - Validates `dMG` source-branch error handling.
+  - Validates timing-helper behavior.
+
+Files modified:
+
+- `src/beltrami_jax/__init__.py`
+  - Exports the new backend adapter API.
+- `README.md`
+  - Documents the narrow adapter and gives a SPECTRE-style usage snippet.
+- `docs/integration.md`
+  - Adds the minimal SPECTRE backend adapter contract and recommended SPECTRE-side patch size.
+- `docs/api.md`, `docs/overview.md`, `docs/validation.md`
+  - Include the new module and validation scope.
+- `SPECTRE_MIGRATION_PLAN.md`
+  - Adds Phase 3.5 for the small SPECTRE adapter boundary.
+
+Design decisions:
+
+- The adapter consumes already assembled `dMA`, `dMD`, `dMB`, `dMG`, `mu`, `psi`, and branch flags. This keeps the first SPECTRE integration experiment independent of the larger JAX-native geometry assembly port.
+- `solve_spectre_assembled_numpy` is the recommended first SPECTRE call site because it returns plain NumPy arrays and floats.
+- The default SPECTRE backend should remain Fortran. The JAX backend should be explicitly experimental until coefficient parity and force-coupled derivative requirements are complete.
+- No absolute runtime threshold was added to tests because CI CPU timing is noisy. Runtime is tested structurally through JIT-backed functions, repeated-call timing helpers, and batching support.
+
+Current interpretation:
+
+- `beltrami_jax` can now be benchmarked as a drop-in linear solve backend for the exact matrices SPECTRE already assembles.
+- This is not a full SPECTRE backend replacement yet, but it reduces the next SPECTRE fork change to a small adapter layer.
+- The next best lane remains Phase 4 matrix assembly parity, using the packaged SPECTRE linear fixtures as component-level targets.
+
+Verification after adding the adapter:
+
+- `./.venv/bin/python examples/spectre_backend_dropin.py`
+  - single-volume SPECTRE backend relative solution error `4.630e-16`
+  - batched equal-size SPECTRE volume max relative solution error `1.964e-16`
+- `./.venv/bin/python -m pytest`
+  - `67 passed in 26.21s`
+  - total coverage `94.48%`

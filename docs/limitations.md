@@ -37,7 +37,7 @@ The near-term roadmap is:
 
 1. enable and verify the hosted Read the Docs project
 2. add more public SPECTRE HDF5 vector-potential comparison cases
-3. add a higher-level integration-oriented solve API aimed directly at SPECTRE TOML/state input
+3. use the new SPECTRE assembled-matrix backend adapter in a small SPECTRE fork experiment
 4. implement JAX-native SPECTRE interface-geometry integral assembly
 5. broaden benchmarks beyond the current dense-regression and compact internal-geometry cases
 6. add broader SPEC/SPECTRE parity tests for branch-specific geometry terms

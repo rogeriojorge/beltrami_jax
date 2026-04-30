@@ -23,6 +23,15 @@ from .operators import (
 from .reference import list_packaged_references, load_packaged_reference, load_spec_text_dump
 from .solver import solve_from_components, solve_operator, solve_parameter_scan
 from .spectre_input import SpectreInputSummary, load_spectre_input_toml
+from .spectre_backend import (
+    SpectreBackendBatchSolve,
+    SpectreBackendSolve,
+    SpectreBackendTiming,
+    benchmark_spectre_backend,
+    solve_spectre_assembled,
+    solve_spectre_assembled_batch,
+    solve_spectre_assembled_numpy,
+)
 from .spectre_io import (
     SpectreH5Reference,
     SpectreVectorPotential,
@@ -100,6 +109,9 @@ __all__ = [
     "SpectreBeltramiLayout",
     "SpectreBeltramiDofLayout",
     "SpectreInputSummary",
+    "SpectreBackendBatchSolve",
+    "SpectreBackendSolve",
+    "SpectreBackendTiming",
     "SpectreVolumeBlock",
     "SpectreVolumeDofMap",
     "SpectreVectorPotential",
@@ -109,6 +121,7 @@ __all__ = [
     "assemble_rhs",
     "basis_values",
     "benchmark_parameter_scan",
+    "benchmark_spectre_backend",
     "benchmark_solve",
     "build_fourier_mode_basis",
     "build_spectre_beltrami_layout",
@@ -150,6 +163,9 @@ __all__ = [
     "solve_from_components",
     "solve_operator",
     "solve_parameter_scan",
+    "solve_spectre_assembled",
+    "solve_spectre_assembled_batch",
+    "solve_spectre_assembled_numpy",
     "spectre_fourier_modes",
     "spectre_mode_count",
     "spectre_region_flags",

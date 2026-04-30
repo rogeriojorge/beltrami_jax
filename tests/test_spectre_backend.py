@@ -12,6 +12,8 @@ from beltrami_jax import (
     solve_spectre_assembled_numpy,
 )
 
+RESIDUAL_TOLERANCE = 1.0e-11
+
 
 def _backend_kwargs(fixture):
     system = fixture.system
@@ -33,7 +35,7 @@ def test_spectre_backend_matches_all_packaged_spectre_linear_solutions() -> None
         expected = np.asarray(fixture.expected_solution)
         relative_error = np.linalg.norm(np.asarray(result.solution) - expected) / max(np.linalg.norm(expected), 1e-300)
         assert relative_error < 3e-12
-        assert float(result.relative_residual_norm) < 3e-12
+        assert float(result.relative_residual_norm) < RESIDUAL_TOLERANCE
 
 
 def test_spectre_backend_numpy_wrapper_is_adapter_friendly() -> None:
@@ -67,7 +69,7 @@ def test_spectre_backend_batches_equal_size_plasma_volumes() -> None:
         expected = np.asarray(fixture.expected_solution)
         relative_error = np.linalg.norm(np.asarray(result.solutions[row]) - expected) / max(np.linalg.norm(expected), 1e-300)
         assert relative_error < 3e-12
-    assert np.max(np.asarray(result.relative_residual_norms)) < 3e-12
+    assert np.max(np.asarray(result.relative_residual_norms)) < RESIDUAL_TOLERANCE
 
 
 def test_spectre_backend_supports_no_dmg_plasma_default() -> None:

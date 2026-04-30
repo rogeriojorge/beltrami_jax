@@ -1222,6 +1222,88 @@ Validation results:
   - outcome:
     - build succeeded
 
+### 2026-04-30: SPECTRE release assessment and migration plan
+
+Trigger:
+
+- Collaborator asked what the actual `beltrami_jax` input is, whether vector-potential coefficients were compared to SPEC/SPECTRE `.h5` output, and whether the repeated "large aspect-ratio" language means the implementation is restricted to large-aspect-ratio tokamaks.
+- SPECTRE is now open source at `https://gitlab.com/spectre-eq/spectre`.
+
+Assessment outcome:
+
+- The collaborator's concerns are valid.
+- Current `beltrami_jax` fixture mode is a developer validation path, not the final user-facing input path.
+- Current internal geometry mode is a shaped large-aspect-ratio torus prototype, not SPECTRE's exact arbitrary 3D Fourier-interface geometry path.
+- Current `beltrami_jax` validation compares dumped matrices, RHS vectors, and packed solutions from SPEC text dumps. It does not yet directly compare HDF5 `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`.
+- The docs and README need to be tightened so they do not imply full SPECTRE backend parity.
+
+SPECTRE local bring-up:
+
+- Cloned SPECTRE into `/Users/rogerio/local/spectre`.
+- SPECTRE remote:
+  - `https://gitlab.com/spectre-eq/spectre.git`
+- Assessed SPECTRE commit:
+  - `08e358a`
+- Installed SPECTRE with:
+  - `python3 -m venv .venv`
+  - `HDF5_ROOT=/opt/homebrew/opt/hdf5-mpi FFTW_ROOT=/opt/homebrew/opt/fftw .venv/bin/python -m pip install -e .`
+- Runtime required:
+  - `DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib`
+  - `OMP_NUM_THREADS=1`
+
+Local SPECTRE patches required to run on this machine:
+
+- `/Users/rogerio/local/spectre/spectre/file_io/input_parameters.py`
+  - guarded an empty `@field_serializer(*arrays_of_length_nvol_minus_1)` call because Pydantic 2.13 rejects a field serializer with no fields
+- `/Users/rogerio/local/spectre/fortran_src/beltrami_field_mod.F90`
+  - rewrote a legacy `1040 format(...)` descriptor that gfortran 15 rejects at runtime
+
+SPECTRE code path identified:
+
+- Python `spectre.force_targets.force_real(...)` calls `test.field_mod.solve_field(...)`.
+- Fortran `beltrami_field_mod.construct_beltrami_field(...)` dispatches local constraint cases and calls `solve_beltrami_system(...)` directly or through `hybrj2`.
+- Fortran `beltrami_solver_mod.solve_beltrami_system(...)` builds `dMA - mu*dMD`, builds the RHS from `dMB`, `dMG`, and fluxes, solves with LAPACK, computes energy/helicity integrals, and unpacks the solution into `Ate/Aze/Ato/Azo`.
+- Fortran `matrices_mod.matrix(...)` and `matrixBG(...)` assemble the Beltrami matrices and RHS operators.
+- Fortran `wrapper_funcs_mod.get_vec_pot(...)` exposes flat `Ate/Aze/Ato/Azo` arrays.
+- SPECTRE's `tests/compare/test_compare_to_spec.py` already compares force modes and HDF5 vector-potential datasets against old reference output.
+
+Manual SPECTRE validation performed:
+
+- Ran SPECTRE field calculation for `tests/wrapper/cyl_manyvol_test.toml`.
+- Obtained:
+  - `xinit_shape = (17,)`
+  - `force_shape = (2, 512)`
+  - vector-potential coefficient shapes `(17, 8)` for `Ate`, `Aze`, `Ato`, `Azo`
+- Manually reproduced the SPECTRE comparison-test logic for four shipped reference cases.
+- Vector-potential relative errors against `reference.h5`:
+  - `G2V32L1Fi`: `Ate 1.27e-15`, `Aze 4.70e-15`, `Ato 0`, `Azo 0`
+  - `G3V3L3Fi`: `Ate 5.68e-15`, `Aze 4.83e-14`, `Ato 0`, `Azo 0`
+  - `G3V3L2Fi_stability`: `Ate 5.69e-15`, `Aze 5.07e-14`, `Ato 0`, `Azo 0`
+  - `G3V8L3Free`: `Ate 2.78e-15`, `Aze 3.20e-15`, `Ato 0`, `Azo 0`
+- Force-mode relative errors in the same manual checks were `1.1e-13` to `3.2e-12`.
+- The full pytest comparison command still terminated without a Python traceback in this local environment, so the reliable evidence from this session is the manual equivalent comparison.
+
+New planning document:
+
+- Added `SPECTRE_MIGRATION_PLAN.md`.
+- It contains:
+  - direct answers to the collaborator's email
+  - `beltrami_jax` code assessment
+  - SPECTRE source-code map
+  - SPECTRE build/run notes
+  - exact validation results from this assessment
+  - what must be replaced to remove Fortran Beltrami from SPECTRE
+  - phased implementation roadmap
+  - design decisions for Rogerio to choose before SPECTRE fork work starts
+
+Immediate next implementation lanes:
+
+- Fix README/docs to clarify current input modes, fixture role, HDF5 coefficient gap, and large-aspect-ratio wording.
+- Add SPECTRE HDF5 vector-potential readers to `beltrami_jax`.
+- Implement exact SPECTRE pack/unpack mapping for `Ate/Aze/Ato/Azo`.
+- Add tests and plots comparing `beltrami_jax` vector-potential coefficients to SPECTRE reference HDF5 files.
+- After design choices are confirmed, create a SPECTRE fork/branch with an optional JAX Beltrami backend.
+
 ## 19. Notes For Future Updates
 
 When future work is done, update the following sections:

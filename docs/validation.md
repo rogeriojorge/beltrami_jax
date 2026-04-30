@@ -142,6 +142,8 @@ The current validation is strong for the implemented regression and internal-wor
 Remaining validation work includes:
 
 - comparisons against later SPECTRE integration points
+- direct comparison against SPECTRE/SPEC HDF5 vector-potential coefficients `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`
+- exact SPECTRE pack/unpack parity for those vector-potential coefficients
 - broader 3D fixture coverage closer to anticipated SPECTRE use cases
 - branch-specific parity checks once public SPECTRE source can be compared directly
 

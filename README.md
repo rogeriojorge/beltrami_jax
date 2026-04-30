@@ -7,16 +7,14 @@
 
 `beltrami_jax` is a differentiable JAX implementation of the SPEC/SPECTRE-style Beltrami workflow used inside multi-region relaxed MHD calculations.
 
-The repository now covers the full supported Beltrami path inside `beltrami_jax` itself:
+The repository currently covers two complementary paths:
 
-- internal Fourier geometry and integral assembly that produces SPEC-style `A`, `D`, `B`, and optional vacuum forcing terms
-- dense and GMRES linear solves, including matrix-free GMRES usage
-- an outer helicity-constrained nonlinear update loop for the Beltrami multiplier `mu`
-- axis-regularized basis construction for coordinate-singularity-safe internal assembly
-- validation against real dumped SPEC systems
-- vectorization, autodiff, diagnostics, benchmarks, and standalone example workflows
+- a SPEC-style assembled-system path, where already assembled `A`, `D`, `B`, optional `G`, fluxes, and reference solutions are loaded for validation and solving
+- an internal geometry prototype, where a shaped large-aspect-ratio torus is assembled in JAX for examples, autodiff, and workflow development
 
-This is still not a full port of all of SPEC or SPECTRE, but the package is no longer limited to pre-dumped linear systems.
+The first path is the current scientifically relevant validation path. The second path is useful for development, but it is not yet SPECTRE's full arbitrary 3D Fourier-interface geometry assembly.
+
+This is not yet a full SPECTRE Beltrami backend. In particular, direct SPECTRE TOML input, exact SPECTRE interface-geometry assembly, and direct HDF5 vector-potential coefficient parity for `vector_potential/Ate`, `Aze`, `Ato`, and `Azo` are planned next steps documented in [SPECTRE_MIGRATION_PLAN.md](/Users/rogerio/local/beltrami_jax/SPECTRE_MIGRATION_PLAN.md).
 
 The repository ships under the MIT License; see [LICENSE](/Users/rogerio/local/beltrami_jax/LICENSE).
 
@@ -44,10 +42,10 @@ which, after geometry-dependent assembly, becomes a linear system
 \mathbf{M} = \mathbf{A} - \mu \mathbf{D}.
 ```
 
-`beltrami_jax` now supports both:
+`beltrami_jax` currently supports both:
 
 - direct regression against dumped SPEC linear systems
-- internally assembled geometry-driven Beltrami solves that go from input geometry to nonlinear `mu` update, output files, and postprocessing
+- internally assembled prototype geometry solves that go from a shaped-torus model to nonlinear `mu` update, output files, and postprocessing
 
 In terms of magnetic-field physics, the code works with a discretized vector potential whose curl reconstructs the magnetic field. In Taylor-relaxed plasma regions the force-free relation
 
@@ -62,7 +60,7 @@ is the Euler-Lagrange condition that arises when magnetic energy is minimized at
 Today the repository includes:
 
 - a typed `BeltramiLinearSystem` container
-- internal Fourier geometry assembly via `assemble_fourier_beltrami_system`
+- internal prototype Fourier geometry assembly via `assemble_fourier_beltrami_system`
 - operator assembly for plasma and vacuum branches
 - dense and GMRES solve paths with residual reporting
 - matrix-free GMRES through `gmres_solve`
@@ -76,6 +74,14 @@ Today the repository includes:
 - packaged SPEC regression fixtures covering cylindrical, toroidal, 3D, and vacuum branches
 - standalone example workflows that define geometries, write input files, run solves, save outputs, and generate figures
 - tests that cover dumped SPEC systems and the internal geometry-driven workflow
+
+## Input Modes and Current Parity Status
+
+The current production-style input is an assembled Beltrami system: `d_ma`, `d_md`, `d_mb`, optional `d_mg`, `mu`, and a two-component flux vector `psi`. Packaged fixtures are examples of that input and are primarily developer validation assets, not something ordinary users should need to create by hand.
+
+The current geometry-driven input is `FourierBeltramiGeometry`. It is intentionally limited to a shaped large-aspect-ratio torus prototype. It is not yet equivalent to SPECTRE's input model, where the user provides interface Fourier geometry, resolution, flux/current/helicity constraints, and branch flags.
+
+Validation today compares dumped SPEC matrices, RHS vectors, and packed solutions. Direct comparison of SPECTRE/SPEC HDF5 vector-potential coefficients (`Ate`, `Aze`, `Ato`, `Azo`) is not implemented yet. That coefficient-level comparison is now the next required validation milestone before claiming SPECTRE backend replacement.
 
 ## Installation
 
@@ -231,7 +237,7 @@ In addition to SPEC-regression fixtures, the package now exposes an internal geo
 - export outputs with `save_nonlinear_solution`
 - postprocess with diagnostics, parameter scans, autodiff, and custom figures
 
-That is the path used by the new standalone examples and it is the package’s current answer to the Beltrami functionality that future SPECTRE integration will need.
+That is the path used by the standalone examples. It should be read as a prototype workflow and teaching interface, not as the final SPECTRE backend API. The final SPECTRE path must start from SPECTRE's interface Fourier geometry and reproduce SPECTRE's `Ate`, `Aze`, `Ato`, and `Azo` coefficients.
 
 ## Using `beltrami_jax` From Other Codes
 
@@ -275,15 +281,16 @@ result = solve_helicity_constrained_equilibrium(problem)
 
 ### From SPECTRE or another nonlinear equilibrium code
 
-The intended integration contract is:
+The intended future integration contract is:
 
-1. provide geometry, basis, fluxes, and target constraints
-2. call `assemble_fourier_beltrami_system` or `BeltramiProblem`
-3. solve with `solve_from_components` or `solve_helicity_constrained_equilibrium`
-4. consume the returned coefficients, energies, helicities, residuals, and histories
-5. save or exchange data using `save_problem_json` and `save_nonlinear_solution`
+1. provide SPECTRE interface Fourier geometry, basis metadata, fluxes, and target constraints
+2. assemble SPECTRE-equivalent `A`, `D`, `B`, and optional `G` operators in JAX
+3. solve with the same branch logic as SPECTRE's Beltrami path
+4. return packed coefficients and SPECTRE-compatible `Ate`, `Aze`, `Ato`, and `Azo`
+5. consume the returned energies, helicities, residuals, and histories
 
 See the full integration notes in [docs/integration.md](/Users/rogerio/local/beltrami_jax/docs/integration.md).
+See the current SPECTRE replacement roadmap in [SPECTRE_MIGRATION_PLAN.md](/Users/rogerio/local/beltrami_jax/SPECTRE_MIGRATION_PLAN.md).
 
 ## Generating new fixtures from SPEC
 

@@ -48,9 +48,9 @@ result = solve_from_components(system, method="gmres", tolerance=1.0e-10)
 
 This is the natural entry point for C++, Fortran, or Python codes that already know how to assemble their own discrete operators.
 
-### Level 3: internal geometry assembly
+### Level 3: internal prototype geometry assembly
 
-Use this when the upstream code wants `beltrami_jax` to handle the supported internal assembly itself.
+Use this when the upstream code wants `beltrami_jax` to handle the current prototype assembly itself. This path uses `FourierBeltramiGeometry`, which is a shaped large-aspect-ratio torus model. It is not yet SPECTRE's full arbitrary 3D interface-Fourier geometry model.
 
 ```python
 from beltrami_jax import (
@@ -114,18 +114,25 @@ Main entry points:
 
 ### SPECTRE
 
-Intended use:
+Intended future use:
 
 - replace or simplify legacy Fortran-interface Beltrami solve components
 - keep the Beltrami kernel differentiable and easier to test
-- exchange geometry and constraint information at the `BeltramiProblem` or assembled-system level
+- exchange SPECTRE interface geometry, basis metadata, fluxes, constraints, and branch flags
 
-Likely entry points:
+Current safe entry points:
+
+- `BeltramiLinearSystem`
+- `solve_from_components`
+- future SPECTRE HDF5/vector-potential validation helpers
+
+Prototype-only entry points:
 
 - `BeltramiProblem`
 - `assemble_fourier_beltrami_system`
 - `solve_helicity_constrained_equilibrium`
-- `save_nonlinear_solution`
+
+These prototype entry points are not yet the final SPECTRE backend API.
 
 ### Optimization or inverse-design codes
 
@@ -171,4 +178,6 @@ These helpers are useful when one code prepares the problem and another code per
 
 ## Current boundary
 
-The integration boundary is strong enough to ship for the supported internal model, but it is still not exact parity with all SPEC/SPECTRE branches. The main remaining work is broader branch coverage and final interface alignment once public SPECTRE source is available.
+The integration boundary is strong enough to ship for the supported assembled-system and prototype internal-geometry models, but it is still not exact parity with all SPEC/SPECTRE branches. The main remaining work is direct SPECTRE HDF5 vector-potential parity, exact SPECTRE pack/unpack, SPECTRE interface-geometry assembly, and full branch-specific constraint logic.
+
+See the root-level `SPECTRE_MIGRATION_PLAN.md` for the current SPECTRE replacement plan.

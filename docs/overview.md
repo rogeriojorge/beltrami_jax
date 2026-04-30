@@ -24,17 +24,19 @@ The solution vector $\mathbf{a}$ contains packed vector-potential coefficients. 
 
 ## Implemented model in `beltrami_jax`
 
-The package now supports two complementary workflows:
+The package currently supports two complementary workflows:
 
 - dumped SPEC regression, where the geometry-dependent matrices are loaded from a SPEC export
-- internal Fourier-geometry assembly, where `beltrami_jax` builds the matrices itself and then runs the same solve machinery
+- internal Fourier-geometry prototype assembly, where `beltrami_jax` builds matrices for a shaped large-aspect-ratio torus and then runs the same solve machinery
+
+The first workflow is the current parity-oriented path. The second workflow is a development and demonstration path. It is not yet a replacement for SPECTRE's full 3D interface-geometry assembly.
 
 The package currently provides:
 
 - `BeltramiLinearSystem`
   - holds the dense matrices and metadata required for the solve
 - `FourierBeltramiGeometry`
-  - parameterizes a shaped large-aspect-ratio torus used for internal assembly
+  - parameterizes a shaped large-aspect-ratio torus used for prototype internal assembly
 - `build_fourier_mode_basis`
   - constructs a packed cosine/sine basis with axis-safe radial powers
 - `assemble_fourier_beltrami_system`
@@ -97,9 +99,11 @@ The example scripts print progress and diagnostics. This is intentional. The goa
 
 ## Current limitations
 
-This package now performs internal geometry assembly, Krylov solves, and a helicity-constrained outer loop, but it still does not cover:
+This package now performs prototype internal geometry assembly, Krylov solves, and a helicity-constrained outer loop, but it still does not cover:
 
 - every SPEC/SPECTRE branch and auxiliary matrix path
+- SPECTRE's exact interface-Fourier geometry input and integral assembly
+- direct HDF5 vector-potential coefficient parity against `Ate`, `Aze`, `Ato`, and `Azo`
 - full sparse production scaling
 - the broader equilibrium and constraint machinery beyond the supported Beltrami workflow
 

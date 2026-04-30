@@ -10,7 +10,7 @@ The current package is deliberately narrower than the long-term project goal.
 
 ### Not a full SPECTRE port
 
-The package is intended as a candidate Beltrami kernel for future SPECTRE integration, but it is not yet wired into SPECTRE and does not yet match any final SPECTRE API contract.
+The package is intended as a candidate Beltrami kernel for SPECTRE integration, but it is not yet wired into SPECTRE and does not yet match SPECTRE's final API contract. SPECTRE is now public, so the next milestone is exact comparison against its TOML inputs and HDF5 vector-potential outputs.
 
 ### Limited linear-algebra coverage
 
@@ -25,7 +25,7 @@ The current implementation supports:
 - dense and GMRES solve paths
 - an outer helicity-constrained nonlinear update
 
-It does not yet cover every branch and auxiliary matrix path present in SPEC's legacy Fortran.
+It does not yet cover every branch and auxiliary matrix path present in SPEC/SPECTRE Fortran, including exact SPECTRE interface-geometry assembly, exact vector-potential pack/unpack, and all `Lconstraint` branches.
 
 ### Limited fixture diversity
 
@@ -36,10 +36,11 @@ The repository now includes multiple dumped SPEC systems, including a nonzero-`m
 The near-term roadmap is:
 
 1. enable and verify the hosted Read the Docs project
-2. add more dumped SPEC fixtures
-3. add a higher-level integration-oriented solve API aimed directly at SPECTRE
-4. broaden benchmarks beyond the current dense-regression and compact internal-geometry cases
-5. add broader SPEC/SPECTRE parity tests for branch-specific geometry terms
+2. add SPECTRE HDF5 vector-potential readers and coefficient-comparison tests
+3. implement exact SPECTRE pack/unpack for `Ate`, `Aze`, `Ato`, and `Azo`
+4. add a higher-level integration-oriented solve API aimed directly at SPECTRE TOML/state input
+5. broaden benchmarks beyond the current dense-regression and compact internal-geometry cases
+6. add broader SPEC/SPECTRE parity tests for branch-specific geometry terms
 
 ## Medium-term technical directions
 
@@ -56,6 +57,6 @@ It is easy to overstate progress on a project like this. The correct current sta
 
 - the package now supports a full internal Beltrami workflow for its current Fourier-geometry model
 - the linear kernel has also been regression-tested against multiple SPEC dumps, including plasma and vacuum cases
-- exact parity with all SPEC/SPECTRE branches still remains future work
+- exact parity with all SPEC/SPECTRE branches and HDF5 vector-potential coefficients still remains future work
 
 That distinction matters for both scientific correctness and future integration planning.

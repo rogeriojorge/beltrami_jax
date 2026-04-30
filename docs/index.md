@@ -10,7 +10,7 @@ $$
 \mathbf{M} = \mathbf{A} - \mu \mathbf{D},
 $$
 
-and now supports dumped-SPEC regression, an internal prototype geometry-driven path, and SPECTRE TOML/HDF5 validation utilities.
+and now supports dumped-SPEC regression, an internal prototype geometry-driven path, and SPECTRE TOML/HDF5/linear-system validation utilities.
 
 ```{toctree}
 :maxdepth: 2
@@ -41,6 +41,7 @@ The repository currently covers the supported Beltrami workflow components:
 - regression testing against SPEC fixtures
 - SPECTRE TOML input summaries
 - SPECTRE HDF5 vector-potential coefficient loading and comparison
+- SPECTRE solution-vector pack/unpack maps and packaged linear-system parity fixtures
 
 It does not yet include all of SPEC or a full JAX-native SPECTRE Beltrami backend.
 
@@ -57,4 +58,4 @@ The medium-term objective is to make the Beltrami stage easier to:
 - install without Fortran bindings
 - inspect and benchmark
 - differentiate in optimization and inverse-design workflows
-- integrate into future SPECTRE development once the SPECTRE source is public
+- integrate into released SPECTRE development once the JAX-native assembly path reaches coefficient parity

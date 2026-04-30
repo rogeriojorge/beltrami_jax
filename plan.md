@@ -1547,3 +1547,89 @@ If solver behavior changes, record:
 - the API change
 - the physical or numerical reason
 - the validation evidence against SPEC
+
+## 20. 2026-04-30 Addendum: Released SPECTRE Linear-System Fixture Lane
+
+Goal of this lane:
+
+- Move beyond legacy SPEC text-dump validation by extracting the actual dense Beltrami linear systems assembled by the released SPECTRE code.
+- Validate the current JAX linear kernel against SPECTRE's `solve_beltrami_system` output for public SPECTRE compare cases.
+- Keep the existing HDF5 vector-potential coefficient plots and add a second reviewer-facing plot for matrix/RHS/solution parity.
+
+Files added:
+
+- `tools/export_spectre_linear_system_npz.py`
+  - Runs from the local SPECTRE virtual environment.
+  - Loads a SPECTRE `input.toml`, finalizes the SPECTRE state, assembles Beltrami matrices for each volume, calls `solve_beltrami_system`, and writes one `.npz` per volume.
+  - Exports `d_ma`, `d_md`, `d_mb`, `d_mg`, assembled `matrix`, assembled `rhs`, SPECTRE `solution`, fluxes, `mu`, branch flags, residual norms, and case metadata.
+- `src/beltrami_jax/spectre_linear.py`
+  - Public loader API for packaged released-SPECTRE linear-system fixtures.
+  - Main functions: `list_packaged_spectre_linear_cases`, `list_packaged_spectre_linear_systems`, `load_packaged_spectre_linear_system`, and `load_all_packaged_spectre_linear_systems`.
+  - Main dataclass: `PackagedSpectreLinearSystem`.
+- `src/beltrami_jax/data/spectre_linear/`
+  - Packaged `.npz` fixtures for 19 SPECTRE volume solves from `G2V32L1Fi`, `G3V3L3Fi`, `G3V3L2Fi_stability`, and `G3V8L3Free`.
+- `tests/test_spectre_linear.py`
+  - Verifies fixture listing, metadata, exact operator reconstruction, exact RHS reconstruction, and SPECTRE solution parity.
+- `tools/generate_spectre_linear_validation_assets.py`
+  - Generates `docs/_static/spectre_linear_parity.png` and `docs/_static/spectre_linear_parity_summary.json`.
+
+Files modified:
+
+- `src/beltrami_jax/types.py`
+  - Added `include_d_mg_in_rhs` to `BeltramiLinearSystem` so non-vacuum coordinate-singularity/current-constraint branches can use `dMG` when SPECTRE does.
+- `src/beltrami_jax/operators.py`
+  - `assemble_rhs` now subtracts `d_mg` whenever `include_d_mg_in_rhs` is true, rather than tying that source term only to `is_vacuum`.
+- `src/beltrami_jax/__init__.py`
+  - Exported the new SPECTRE linear fixture APIs.
+- `pyproject.toml`
+  - Added packaged SPECTRE linear fixtures to package data.
+- `README.md`, `docs/validation.md`, `docs/integration.md`, `docs/api.md`, `docs/index.md`, `docs/limitations.md`, and `SPECTRE_MIGRATION_PLAN.md`
+  - Documented the new SPECTRE matrix/RHS/solution validation lane and its current boundary.
+
+What worked:
+
+- SPECTRE's existing wrapped modules expose enough low-level functions to assemble and solve Beltrami systems without modifying SPECTRE source.
+- The exported SPECTRE matrices map directly to the existing `BeltramiLinearSystem` convention:
+  - plasma: `matrix = dMA - mu*dMD`, `rhs = -dMB @ psi`
+  - vacuum: `matrix = dMA`, `rhs = -dMG - dMB @ psi`
+  - coordinate-singularity `Lconstraint == -2`: `dMG` must also be included in the RHS source term.
+- JAX reassembles every packaged SPECTRE operator and RHS exactly from the saved components.
+- JAX dense solves reproduce SPECTRE's solved degree-of-freedom vectors with worst relative solution error `1.59e-15` across 19 packaged volume solves.
+
+What did not work initially:
+
+- Exporting multiple SPECTRE volumes in one Python process exposed an f90wrap array-view cache hazard after SPECTRE deallocated and reallocated different-sized Fortran arrays.
+- The first exporter version saved the wrong active slice for `solution`, because SPECTRE's `solution(1:NN,-1:2)` wrapper does not expose the same Python lower-bound convention as `dMA(0:NN,0:NN)`.
+
+Design decisions:
+
+- The exporter now spawns one fresh SPECTRE Python process per volume when no `--volume-index` is provided. This is slower but avoids stale f90wrap views and makes fixture generation reproducible.
+- The first dimension of `dMA`, `dMD`, `dMB`, and `dMG` is sliced as SPECTRE's active Fortran `1:NN` block. The solved vector is sliced from the active Python rows of `solution[:, 1]`, where Python column `1` corresponds to Fortran derivative index `0`.
+- The new packaged SPECTRE linear systems are validation fixtures, not the final user-facing input format. The final SPECTRE backend still needs to assemble these same matrices from TOML/interface geometry in JAX.
+- Existing HDF5 vector-potential coefficient fixtures remain separate from linear-solve fixtures. The HDF5 fixtures validate coefficient orientation and pack/unpack targets; the linear fixtures validate the current JAX dense solve after SPECTRE assembly.
+
+Current validation evidence:
+
+- Local test suite:
+  - `./.venv/bin/python -m pytest`
+  - `58 passed in 23.15s`
+  - total coverage `94.32%`
+- SPECTRE linear parity panel:
+  - `PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_linear_validation_assets.py`
+  - worst solution relative error `1.589e-15`
+  - worst JAX relative residual norm `2.560e-12`
+- Existing SPECTRE HDF5 parity panel is retained:
+  - `docs/_static/spectre_vecpot_parity.png`
+  - worst global vector-potential coefficient relative error `1.52e-14`
+
+Next best lane:
+
+- Start Phase 4: port enough of SPECTRE's geometry and matrix assembly to JAX to produce `dMA`, `dMD`, `dMB`, and `dMG` directly from SPECTRE TOML/interface Fourier data.
+- Use the newly packaged SPECTRE linear systems as the per-volume acceptance target for assembly:
+  - first match matrix component shapes and branch flags;
+  - then match `dMB/dMG`;
+  - then match `dMA/dMD`;
+  - finally solve and unpack into `Ate/Aze/Ato/Azo`.
+- Keep the current plots for future PR material:
+  - `docs/_static/spectre_vecpot_parity.png`
+  - `docs/_static/spectre_linear_parity.png`

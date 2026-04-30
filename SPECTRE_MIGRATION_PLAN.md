@@ -19,6 +19,7 @@ What currently works:
 - It now reads SPECTRE TOML input summaries and SPECTRE HDF5 vector-potential coefficients.
 - It now compares fresh SPECTRE `get_vec_pot_flat` exports against public SPECTRE `reference.h5` files and generates a reviewer-facing parity figure.
 - It now reconstructs SPECTRE's Fourier mode order, per-volume coefficient id maps, and `packab`-compatible solution-vector layout for `Ate/Aze/Ato/Azo`.
+- It now packages released-SPECTRE per-volume Beltrami linear systems and validates JAX matrix/RHS/solution parity for 19 volume solves.
 
 What is not yet done:
 
@@ -63,7 +64,7 @@ Current `beltrami_jax` answer:
 - Yes for the SPECTRE IO/validation contract; not yet for a JAX-native SPECTRE backend.
 - `beltrami_jax` now loads SPECTRE `reference.h5` vector-potential datasets and compares them to fresh SPECTRE exports from `spectre.get_vec_pot_flat`.
 - The JAX-native internal solver still needs exact SPECTRE geometry assembly before it can produce those HDF5 coefficients directly; the SPECTRE coefficient pack/unpack maps are now implemented.
-- Existing dense validation still compares to linear systems dumped from an instrumented local SPEC build: operator, RHS, and packed solution vector.
+- Existing dense validation compares to linear systems dumped from an instrumented local SPEC build and now also to released SPECTRE per-volume linear-system exports: operator, RHS, and solved degree-of-freedom vector.
 
 SPECTRE assessment:
 
@@ -99,6 +100,8 @@ Completed `beltrami_jax` work:
 - Added `src/beltrami_jax/spectre_layout.py` to turn SPECTRE `Lrad` metadata into packed volume/exterior slices.
 - Added `src/beltrami_jax/spectre_pack.py` to mirror SPECTRE `gi00ab`, `lregion`, `preset_mod.F90`, and `packab` degree-of-freedom maps.
 - Generated `docs/_static/spectre_vecpot_parity.png`, showing worst global relative coefficient error `1.52e-14` across four public SPECTRE compare cases.
+- Added `tools/export_spectre_linear_system_npz.py`, `src/beltrami_jax/spectre_linear.py`, packaged fixtures under `src/beltrami_jax/data/spectre_linear/`, and `docs/_static/spectre_linear_parity.png`.
+- Current released-SPECTRE linear parity covers 19 volume solves with exact matrix/RHS reconstruction and worst solution relative error `1.59e-15`.
 
 Required remaining `beltrami_jax` work:
 
@@ -577,17 +580,20 @@ Acceptance:
 
 ### Phase 3: SPECTRE Matrix/RHS Extraction
 
+Status: complete for packaged released-case validation fixtures. A future
+SPECTRE PR can still add a cleaner upstream helper, but `beltrami_jax` no
+longer needs local SPECTRE source patches to validate matrix/RHS/solution
+parity for the shipped cases.
+
 Goal: expand validation from old SPEC text dumps to SPECTRE's current released code.
 
-Options:
+Implemented path:
 
-- Preferred temporary path: add a SPECTRE wrapper helper that exposes `dMA`, `dMD`, `dMB`, `dMG`, matrix, RHS, solution, and metadata after `solve_field`.
-- Alternative: instrument SPECTRE locally as was done with SPEC.
-
-New code:
-
-- `tools/build_spectre_fixture.py`.
-- `src/beltrami_jax/spectre_reference.py`.
+- `tools/export_spectre_linear_system_npz.py` runs from a SPECTRE environment.
+- The exporter finalizes SPECTRE state, allocates one volume in a fresh Python process to avoid f90wrap reallocation-cache hazards, calls SPECTRE's geometry and matrix assembly, calls `solve_beltrami_system`, and writes one `.npz` per volume.
+- `src/beltrami_jax/spectre_linear.py` lists and loads packaged SPECTRE linear fixtures.
+- `tests/test_spectre_linear.py` verifies exact operator/RHS reconstruction and JAX solution parity for all packaged SPECTRE volume systems.
+- `tools/generate_spectre_linear_validation_assets.py` generates the reviewer-facing linear parity panel.
 
 SPECTRE helper target:
 
@@ -598,11 +604,8 @@ SPECTRE helper target:
 
 Acceptance:
 
-- `beltrami_jax` solves SPECTRE-exported systems and matches:
-  - matrix;
-  - RHS;
-  - packed solution;
-  - `Ate/Aze/Ato/Azo`.
+- `beltrami_jax` solves SPECTRE-exported systems and matches matrix/RHS exactly and solved vectors to `1.59e-15` worst relative error across the current 19 packaged volume solves.
+- The remaining coefficient-level acceptance belongs to Phase 4/5: JAX-native SPECTRE geometry assembly must produce solved vectors that unpack to SPECTRE `Ate/Aze/Ato/Azo`.
 
 ### Phase 4: Port SPECTRE Assembly to JAX
 

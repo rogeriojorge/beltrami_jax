@@ -49,6 +49,10 @@ The SPECTRE-facing validation tools also generate a coefficient-level HDF5 parit
 
 ![SPECTRE vector-potential parity](_static/spectre_vecpot_parity.png)
 
+The released SPECTRE linear-system fixtures generate a per-volume matrix/RHS/solution parity panel:
+
+![SPECTRE linear-system parity](_static/spectre_linear_parity.png)
+
 These figures summarize:
 
 - coefficient-level agreement between SPEC and `beltrami_jax`
@@ -58,6 +62,7 @@ These figures summarize:
 - steady-state dense solve timings
 - batched parameter-scan throughput
 - SPECTRE `Ate`, `Aze`, `Ato`, and `Azo` HDF5 coefficient parity for public SPECTRE compare cases
+- SPECTRE `dMA`, `dMD`, `dMB`, `dMG`, matrix, RHS, and solved degree-of-freedom parity for released SPECTRE volume solves
 
 Release-gate example outputs generated from the current source tree:
 
@@ -172,12 +177,52 @@ for label in list_packaged_spectre_cases():
     print(label, case.comparison.global_relative_error)
 ```
 
+### SPECTRE linear-system validation
+
+The SPECTRE linear fixtures are exported from the released SPECTRE wrapper after
+SPECTRE has assembled one volume's Beltrami system and called
+`solve_beltrami_system`. Each fixture stores:
+
+- `d_ma`, `d_md`, `d_mb`, and `d_mg`
+- the dense SPECTRE matrix and RHS used by the solve
+- the SPECTRE solved vector-potential degree-of-freedom vector
+- volume metadata, branch flags, and residual norms
+
+The package currently commits 19 per-volume systems from:
+
+- `G2V32L1Fi`: four plasma volumes
+- `G3V3L3Fi`: three plasma volumes
+- `G3V3L2Fi_stability`: three plasma volumes
+- `G3V8L3Free`: eight plasma volumes plus the vacuum exterior block
+
+Current released-SPECTRE linear parity:
+
+- operator relative error: exactly `0.0` for all packaged fixtures
+- RHS relative error: exactly `0.0` for all packaged fixtures
+- worst solution relative error: `1.59e-15`
+- worst JAX relative residual norm: `2.56e-12`
+
+Programmatic access:
+
+```python
+from beltrami_jax import (
+    list_packaged_spectre_linear_systems,
+    load_packaged_spectre_linear_system,
+    solve_from_components,
+)
+
+for name in list_packaged_spectre_linear_systems():
+    fixture = load_packaged_spectre_linear_system(name)
+    result = solve_from_components(fixture.system)
+    print(name, fixture.n_dof, float(result.relative_residual_norm))
+```
+
 ## Coverage target
 
 The repository enforces a coverage threshold in `pyproject.toml`:
 
 - required line coverage: at least 90%
-- current release-gate result: `50 passed` with `94.01%` line coverage
+- current release-gate result: `58 passed` with `94.32%` line coverage
 
 ## Known validation gaps
 
@@ -185,7 +230,7 @@ The current validation is strong for the implemented regression and internal-wor
 
 Remaining validation work includes:
 
-- comparisons against later SPECTRE integration points
+- comparisons against later SPECTRE integration points beyond exported matrix/RHS/solution fixtures
 - JAX-native generation of SPECTRE HDF5 vector-potential coefficients `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`
 - broader 3D fixture coverage closer to anticipated SPECTRE use cases
 - branch-specific parity checks once public SPECTRE source can be compared directly

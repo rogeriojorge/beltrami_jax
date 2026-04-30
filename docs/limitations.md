@@ -10,7 +10,7 @@ The current package is deliberately narrower than the long-term project goal.
 
 ### Not a full SPECTRE port
 
-The package is intended as a candidate Beltrami kernel for SPECTRE integration, but it is not yet wired into SPECTRE and does not yet match SPECTRE's full backend contract. SPECTRE TOML input summaries, HDF5 vector-potential coefficient comparison, packed radial layouts, and solution-vector pack/unpack maps are now implemented; the remaining milestone is making the JAX-native assembly and solve path produce those SPECTRE coefficients directly.
+The package is intended as a candidate Beltrami kernel for SPECTRE integration, but it is not yet wired into SPECTRE and does not yet match SPECTRE's full backend contract. SPECTRE TOML input summaries, HDF5 vector-potential coefficient comparison, packed radial layouts, solution-vector pack/unpack maps, and released SPECTRE matrix/RHS/solution parity fixtures are now implemented; the remaining milestone is making the JAX-native assembly and solve path produce those SPECTRE coefficients directly from interface geometry.
 
 ### Limited linear-algebra coverage
 
@@ -59,6 +59,7 @@ It is easy to overstate progress on a project like this. The correct current sta
 - the linear kernel has also been regression-tested against multiple SPEC dumps, including plasma and vacuum cases
 - SPECTRE HDF5 coefficient loading/comparison reaches machine-precision parity for fresh SPECTRE exports
 - SPECTRE coefficient pack/unpack maps now match the public SPECTRE layout and round-trip packaged coefficients exactly
+- JAX dense solves reproduce released SPECTRE per-volume Beltrami linear systems once SPECTRE has assembled the matrices
 - exact JAX-native parity with all SPEC/SPECTRE branches and HDF5 vector-potential coefficients still remains future work
 
 That distinction matters for both scientific correctness and future integration planning.

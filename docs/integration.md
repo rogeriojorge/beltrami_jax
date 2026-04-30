@@ -122,6 +122,7 @@ Current supported use:
 - load packaged public SPECTRE compare cases for reproducible CI validation
 - reconstruct SPECTRE's internal Fourier mode order and packed radial block layout
 - pack and unpack SPECTRE-compatible per-volume solution vectors to/from `Ate`, `Aze`, `Ato`, and `Azo`
+- load released SPECTRE per-volume Beltrami linear systems and solve them with JAX
 - use the comparison tooling as the target contract for the future JAX-native backend
 
 Intended future use:
@@ -143,6 +144,8 @@ Current safe entry points:
 - `spectre_fourier_modes`
 - `list_packaged_spectre_cases`
 - `load_packaged_spectre_case`
+- `list_packaged_spectre_linear_systems`
+- `load_packaged_spectre_linear_system`
 
 Prototype-only entry points:
 
@@ -244,6 +247,32 @@ For differentiable coupling, use `pack_vector_potential_jax` and
 `azo` arrays. These methods use JAX scatter/gather operations, so scalar
 objectives downstream of the packed solution vectors remain compatible with
 `jax.grad`.
+
+## SPECTRE linear-system validation workflow
+
+When SPECTRE has already assembled `dMA`, `dMD`, `dMB`, and `dMG`, the current
+JAX solve path can reproduce SPECTRE's dense Beltrami solve directly:
+
+```python
+from beltrami_jax import (
+    load_packaged_spectre_linear_system,
+    solve_from_components,
+)
+
+fixture = load_packaged_spectre_linear_system("G3V8L3Free/lvol9")
+result = solve_from_components(fixture.system, verbose=True)
+
+print(fixture.matrix.shape)
+print(fixture.relative_residual_norm)
+print(float(result.relative_residual_norm))
+```
+
+This workflow validates the linear algebra and branch-specific RHS assembly
+after SPECTRE's Fortran geometry assembly has run. It does not yet remove
+SPECTRE's Fortran assembly path. The final integration lane is to replace the
+upstream construction of `dMA`, `dMD`, `dMB`, and `dMG` with JAX-native
+SPECTRE interface-geometry assembly, then unpack the solved vectors through the
+existing SPECTRE `Ate/Aze/Ato/Azo` maps.
 
 ## Current boundary
 

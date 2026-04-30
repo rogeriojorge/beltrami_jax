@@ -24,12 +24,13 @@ The solution vector $\mathbf{a}$ contains packed vector-potential coefficients. 
 
 ## Implemented model in `beltrami_jax`
 
-The package currently supports two complementary workflows:
+The package currently supports three complementary workflows:
 
 - dumped SPEC regression, where the geometry-dependent matrices are loaded from a SPEC export
 - internal Fourier-geometry prototype assembly, where `beltrami_jax` builds matrices for a shaped large-aspect-ratio torus and then runs the same solve machinery
+- released SPECTRE validation, where TOML/HDF5 coefficient fixtures and per-volume matrix/RHS/solution fixtures are loaded from packaged public compare cases
 
-The first workflow is the current parity-oriented path. The second workflow is a development and demonstration path. It is not yet a replacement for SPECTRE's full 3D interface-geometry assembly.
+The SPEC and SPECTRE fixture workflows are the current parity-oriented paths. The internal geometry workflow is a development and demonstration path. It is not yet a replacement for SPECTRE's full 3D interface-geometry assembly.
 
 The package currently provides:
 
@@ -65,8 +66,12 @@ The package currently provides:
   - load and compare SPECTRE HDF5 `Ate`, `Aze`, `Ato`, and `Azo` coefficient arrays
 - `build_spectre_beltrami_layout_for_vector_potential`
   - maps SPECTRE `Lrad` metadata onto packed volume/exterior coefficient slices
+- `build_spectre_dof_layout_for_vector_potential`
+  - builds SPECTRE-compatible per-volume solution-vector maps for `Ate`, `Aze`, `Ato`, and `Azo`
 - `load_packaged_spectre_case`
   - loads packaged public SPECTRE compare cases for reproducible coefficient-target tests
+- `load_packaged_spectre_linear_system`
+  - loads packaged released-SPECTRE matrix/RHS/solution fixtures for linear-solve parity tests
 - `save_problem_json`, `load_problem_json`, `save_nonlinear_solution`
   - handle user-facing input and output files for standalone workflows
 
@@ -85,9 +90,11 @@ The dataclass stores:
 - `psi`
   - the two-component flux vector used by the linear stage
 - `d_mg`
-  - optional vacuum forcing vector $\mathbf{G}$
+  - optional forcing vector $\mathbf{G}$ used by vacuum and selected SPECTRE coordinate-constraint branches
 - `is_vacuum`
   - controls whether the operator uses the vacuum branch
+- `include_d_mg_in_rhs`
+  - controls whether `d_mg` is subtracted from the RHS source term
 
 ## Design choices
 
@@ -112,6 +119,7 @@ This package now performs prototype internal geometry assembly, Krylov solves, a
 - every SPEC/SPECTRE branch and auxiliary matrix path
 - SPECTRE's exact interface-Fourier geometry input and integral assembly
 - JAX-native HDF5 vector-potential coefficient generation matching `Ate`, `Aze`, `Ato`, and `Azo`
+- JAX-native generation of the released SPECTRE linear-system matrices from TOML/interface geometry
 - full sparse production scaling
 - the broader equilibrium and constraint machinery beyond the supported Beltrami workflow
 

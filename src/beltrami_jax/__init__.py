@@ -39,6 +39,14 @@ from .spectre_layout import (
     build_spectre_beltrami_layout,
     build_spectre_beltrami_layout_for_vector_potential,
 )
+from .spectre_linear import (
+    DEFAULT_PACKAGED_SPECTRE_LINEAR_SYSTEM,
+    PackagedSpectreLinearSystem,
+    list_packaged_spectre_linear_cases,
+    list_packaged_spectre_linear_systems,
+    load_all_packaged_spectre_linear_systems,
+    load_packaged_spectre_linear_system,
+)
 from .spectre_pack import (
     SpectreBeltramiDofLayout,
     SpectreVolumeDofMap,
@@ -74,6 +82,7 @@ from .types import (
 __all__ = [
     "BeltramiProblem",
     "BeltramiLinearSystem",
+    "DEFAULT_PACKAGED_SPECTRE_LINEAR_SYSTEM",
     "FourierBeltramiGeometry",
     "FourierModeBasis",
     "GeometryAssemblyResult",
@@ -81,6 +90,7 @@ __all__ = [
     "NonlinearSolveResult",
     "ParameterScanBenchmark",
     "PackagedSpectreCase",
+    "PackagedSpectreLinearSystem",
     "ReferenceComparison",
     "SolveBenchmark",
     "SolveDiagnostics",
@@ -112,10 +122,14 @@ __all__ = [
     "gmres_solve",
     "list_packaged_references",
     "list_packaged_spectre_cases",
+    "list_packaged_spectre_linear_cases",
+    "list_packaged_spectre_linear_systems",
     "load_problem_json",
     "load_packaged_reference",
     "load_packaged_spectre_case",
+    "load_packaged_spectre_linear_system",
     "load_all_packaged_spectre_cases",
+    "load_all_packaged_spectre_linear_systems",
     "load_saved_solution",
     "load_spectre_reference_h5",
     "load_spectre_input_toml",

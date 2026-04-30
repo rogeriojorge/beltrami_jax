@@ -26,6 +26,7 @@ class BeltramiLinearSystem:
     psi: Array
     d_mg: Array | None = None
     is_vacuum: bool = False
+    include_d_mg_in_rhs: bool = False
     label: str = ""
 
     @property
@@ -43,8 +44,11 @@ class BeltramiLinearSystem:
         psi: ArrayLike,
         d_mg: ArrayLike | None = None,
         is_vacuum: bool = False,
+        include_d_mg_in_rhs: bool | None = None,
         label: str = "",
     ) -> "BeltramiLinearSystem":
+        if include_d_mg_in_rhs is None:
+            include_d_mg_in_rhs = is_vacuum
         return cls(
             d_ma=jnp.asarray(d_ma, dtype=jnp.float64),
             d_md=jnp.asarray(d_md, dtype=jnp.float64),
@@ -53,6 +57,7 @@ class BeltramiLinearSystem:
             psi=jnp.asarray(psi, dtype=jnp.float64),
             d_mg=None if d_mg is None else jnp.asarray(d_mg, dtype=jnp.float64),
             is_vacuum=is_vacuum,
+            include_d_mg_in_rhs=bool(include_d_mg_in_rhs),
             label=label,
         )
 

@@ -16,7 +16,7 @@ def assemble_operator(system: BeltramiLinearSystem) -> Array:
 def assemble_rhs(system: BeltramiLinearSystem) -> Array:
     """Assemble the right-hand side used by SPEC's linear solve stage."""
     rhs = -(system.d_mb @ system.psi)
-    if system.is_vacuum and system.d_mg is not None:
+    if system.include_d_mg_in_rhs and system.d_mg is not None:
         rhs = rhs - system.d_mg
     return rhs
 

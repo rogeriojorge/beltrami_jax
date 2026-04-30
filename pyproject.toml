@@ -71,6 +71,8 @@ beltrami_jax = [
   "data/spectre_compare/*/*.npz",
   "data/spectre_compare/*/*.toml",
   "data/spectre_compare/*.md",
+  "data/spectre_linear/*/*.npz",
+  "data/spectre_linear/*.md",
 ]
 
 [tool.pytest.ini_options]

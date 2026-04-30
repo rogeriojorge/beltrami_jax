@@ -74,6 +74,23 @@ def test_vacuum_rhs_path_uses_dmg() -> None:
     np.testing.assert_allclose(np.asarray(result.operator @ result.solution), expected_rhs, rtol=1e-12, atol=1e-12)
 
 
+def test_coordinate_constraint_rhs_can_use_dmg_without_vacuum_flag() -> None:
+    system = BeltramiLinearSystem.from_arraylike(
+        d_ma=[[2.0, 0.0], [0.0, 3.0]],
+        d_md=[[0.0, 0.0], [0.0, 0.0]],
+        d_mb=[[1.0, 0.0], [0.0, 1.0]],
+        d_mg=[0.25, -0.75],
+        mu=0.0,
+        psi=[1.0, 2.0],
+        is_vacuum=False,
+        include_d_mg_in_rhs=True,
+        label="coordinate-constraint-source",
+    )
+    result = solve_from_components(system)
+    expected_rhs = np.array([-1.25, -1.25])
+    np.testing.assert_allclose(np.asarray(result.rhs), expected_rhs)
+
+
 def test_gmres_matches_dense_fixture_solution() -> None:
     reference = load_packaged_reference("g1v03l0fi_lvol2")
     dense = solve_from_components(reference.system, method="dense")

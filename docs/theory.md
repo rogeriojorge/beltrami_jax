@@ -90,6 +90,18 @@ $$
 
 which is represented in the package by setting `is_vacuum=True`.
 
+### Coordinate-singularity source term
+
+SPECTRE also uses the $\mathbf{G}$ source in selected plasma-region branches,
+for example the coordinate-singularity path with `Lconstraint == -2`. In
+`beltrami_jax`, this is represented by keeping `is_vacuum=False` while setting
+`include_d_mg_in_rhs=True` on `BeltramiLinearSystem`. This keeps the operator
+as $\mathbf{A} - \mu\mathbf{D}$ while using
+
+$$
+\mathbf{r} = -\mathbf{G} - \mathbf{B}\boldsymbol{\psi}.
+$$
+
 ## Internal assembly model in `beltrami_jax`
 
 The internal workflow in this repository constructs a packed Fourier basis over a shaped large-aspect-ratio torus. At the continuous level, the assembled operators approximate

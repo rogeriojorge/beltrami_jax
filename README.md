@@ -11,11 +11,11 @@ The repository currently covers three complementary paths:
 
 - a SPEC-style assembled-system path, where already assembled `A`, `D`, `B`, optional `G`, fluxes, and reference solutions are loaded for validation and solving
 - an internal geometry prototype, where a shaped large-aspect-ratio torus is assembled in JAX for examples, autodiff, and workflow development
-- a SPECTRE-facing validation path, where SPECTRE TOML inputs and HDF5 vector-potential coefficients are loaded, normalized, compared, and plotted
+- a SPECTRE-facing validation path, where SPECTRE TOML inputs, HDF5 vector-potential coefficients, packed solution-vector layouts, and released SPECTRE linear systems are loaded, compared, solved, and plotted
 
-The first path is the current scientifically relevant validation path. The second path is useful for development, but it is not yet SPECTRE's full arbitrary 3D Fourier-interface geometry assembly.
+The assembled-system and SPECTRE fixture paths are the current scientifically relevant validation paths. The internal geometry prototype is useful for development and examples, but it is not yet SPECTRE's full arbitrary 3D Fourier-interface geometry assembly.
 
-This is not yet a full SPECTRE Beltrami backend. SPECTRE TOML input summaries, HDF5 vector-potential coefficient validation, packed radial block layout, and SPECTRE-compatible solution-vector pack/unpack maps are implemented. Exact JAX-native SPECTRE interface-geometry assembly and full local-constraint branch parity remain the core replacement work documented in [SPECTRE_MIGRATION_PLAN.md](/Users/rogerio/local/beltrami_jax/SPECTRE_MIGRATION_PLAN.md).
+This is not yet a full SPECTRE Beltrami backend. SPECTRE TOML input summaries, HDF5 vector-potential coefficient validation, packed radial block layout, SPECTRE-compatible solution-vector pack/unpack maps, and packaged SPECTRE matrix/RHS/solution fixtures are implemented. Exact JAX-native SPECTRE interface-geometry assembly and full local-constraint branch parity remain the core replacement work documented in [SPECTRE_MIGRATION_PLAN.md](/Users/rogerio/local/beltrami_jax/SPECTRE_MIGRATION_PLAN.md).
 
 The repository ships under the MIT License; see [LICENSE](/Users/rogerio/local/beltrami_jax/LICENSE).
 
@@ -80,6 +80,7 @@ Today the repository includes:
 - SPECTRE-compatible `Ate/Aze/Ato/Azo` degree-of-freedom maps matching `gi00ab`, `lregion`, `preset_mod.F90`, and `packab`
 - differentiable JAX scatter/gather pack/unpack helpers between SPECTRE coefficient arrays and per-volume solution vectors
 - packaged public SPECTRE compare cases for reproducible CI validation without a local SPECTRE checkout
+- packaged public SPECTRE per-volume Beltrami linear systems exported from `solve_beltrami_system`
 - standalone example workflows that define geometries, write input files, run solves, save outputs, and generate figures
 - tests that cover dumped SPEC systems and the internal geometry-driven workflow
 
@@ -93,10 +94,13 @@ The SPECTRE-facing input layer now reads SPECTRE TOML files into `SpectreInputSu
 
 The SPECTRE packing layer now reconstructs SPECTRE's internal Fourier ordering and integer degree-of-freedom maps for every packed volume. It can pack coefficient arrays into the same per-volume solution-vector layout used by `packab('P', ...)`, unpack solved vectors back to `Ate/Aze/Ato/Azo`, and perform the same operations with JAX scatter/gather primitives for differentiable integration.
 
-Validation today has two levels:
+The SPECTRE linear-system validation layer packages the dense `dMA`, `dMD`, `dMB`, `dMG`, final matrix, RHS, and solved SPECTRE degree-of-freedom vectors exported from released SPECTRE cases. These fixtures are developer validation assets: they prove the JAX linear solve matches SPECTRE once SPECTRE has assembled the system, but they are not the final user-facing SPECTRE input contract.
+
+Validation today has three levels:
 
 - `beltrami_jax` dense solves reproduce dumped SPEC matrices, RHS vectors, and packed solutions at machine precision for the committed fixtures.
 - Fresh SPECTRE exports reproduce SPECTRE `reference.h5` vector-potential coefficients with worst global relative coefficient error `1.52e-14` across four public SPECTRE compare cases.
+- JAX solves reproduce 19 released SPECTRE per-volume Beltrami linear systems with worst solution relative error `1.59e-15`.
 - Those four SPECTRE compare cases are packaged under `beltrami_jax.data.spectre_compare` so CI and downstream users can reproduce the coefficient target without installing SPECTRE.
 - Packaged SPECTRE vector-potential coefficients round-trip exactly through the implemented SPECTRE degree-of-freedom maps, including coordinate-singularity axis recombination and free-boundary exterior blocks.
 
@@ -165,8 +169,8 @@ The example scripts are intentionally standalone. Each script keeps its input pa
 
 Latest local release gate:
 
-- `50 passed in 21.59s`
-- `94.01%` total line coverage
+- `58 passed in 23.15s`
+- `94.32%` total line coverage
 - strict Sphinx build passed with `-W`
 - runtime code does not depend on `tomllib`, so Python `3.10+` support is not blocked by stdlib TOML parsing differences
 
@@ -192,6 +196,10 @@ SPECTRE HDF5 vector-potential coefficient parity target generated from public SP
 
 ![SPECTRE vector-potential parity](docs/_static/spectre_vecpot_parity.png)
 
+SPECTRE Beltrami matrix/RHS/solution parity generated from packaged released-case linear systems:
+
+![SPECTRE linear-system parity](docs/_static/spectre_linear_parity.png)
+
 Standalone workflow outputs generated from the current example scripts:
 
 ![SPEC fixture workflow](docs/_static/spec_fixture_spectrum.png)
@@ -210,13 +218,14 @@ Current quantitative highlights from the committed validation and benchmark runs
 - the internal vacuum GMRES example converges with relative residual around `4.6e-11`
 - the current validation asset generator measures per-system batched scan costs down to about `5.9e-4` seconds on the local release machine for the compact fixture set
 - SPECTRE HDF5 vector-potential parity reaches worst global relative coefficient error `1.52e-14` across `G2V32L1Fi`, `G3V3L3Fi`, `G3V3L2Fi_stability`, and `G3V8L3Free`
+- SPECTRE linear-system parity reaches worst solution relative error `1.59e-15` across 19 volume solves from the same released compare suite
 
 ## Repository layout
 
 - `src/beltrami_jax/`
   - core package
 - `src/beltrami_jax/data/`
-  - packaged SPEC regression fixtures
+  - packaged SPEC regression fixtures plus SPECTRE coefficient and linear-system validation fixtures
 - `tests/`
   - regression, autodiff, vacuum-path, and smoke tests
 - `examples/`
@@ -319,9 +328,11 @@ from beltrami_jax import (
     build_spectre_dof_layout_for_vector_potential,
     compare_vector_potentials,
     load_packaged_spectre_case,
+    load_packaged_spectre_linear_system,
     load_spectre_input_toml,
     load_spectre_reference_h5,
     load_spectre_vector_potential_npz,
+    solve_from_components,
 )
 
 summary = load_spectre_input_toml("/path/to/spectre/input.toml")
@@ -333,12 +344,15 @@ layout = build_spectre_beltrami_layout_for_vector_potential(summary, reference)
 dof_layout = build_spectre_dof_layout_for_vector_potential(summary, reference)
 solutions = dof_layout.pack_vector_potential(reference)
 roundtrip = dof_layout.unpack_solutions(solutions)
+linear_fixture = load_packaged_spectre_linear_system("G2V32L1Fi/lvol1")
+linear_result = solve_from_components(linear_fixture.system)
 
 print(summary.lrad)
 print(comparison.global_relative_error)
 print(packaged_case.comparison.global_relative_error)
 print(layout.blocks[0].radial_slice)
 print(dof_layout.solution_sizes)
+print(linear_fixture.relative_residual_norm, linear_result.relative_residual_norm)
 ```
 
 The intended JAX-native replacement contract is:
@@ -401,6 +415,22 @@ PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_validation_assets.py --
 ```
 
 Omit `--use-packaged` to compare against a local SPECTRE checkout and fresh local exports instead.
+
+To regenerate the SPECTRE linear-system fixtures, run the exporter from a SPECTRE environment:
+
+```bash
+OMP_NUM_THREADS=1 DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib \
+  /Users/rogerio/local/spectre/.venv/bin/python tools/export_spectre_linear_system_npz.py \
+  /Users/rogerio/local/spectre/tests/compare/G2V32L1Fi/input.toml \
+  examples/_generated/spectre_linear_exports/G2V32L1Fi \
+  --case-label G2V32L1Fi
+```
+
+Then regenerate the committed linear parity panel from the packaged fixtures:
+
+```bash
+PYTHONPATH=src ./.venv/bin/python tools/generate_spectre_linear_validation_assets.py
+```
 
 ## Documentation
 

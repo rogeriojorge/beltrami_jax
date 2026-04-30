@@ -29,6 +29,7 @@ The package currently supports three complementary workflows:
 - dumped SPEC regression, where the geometry-dependent matrices are loaded from a SPEC export
 - internal Fourier-geometry prototype assembly, where `beltrami_jax` builds matrices for a shaped large-aspect-ratio torus and then runs the same solve machinery
 - released SPECTRE validation, where TOML/HDF5 coefficient fixtures and per-volume matrix/RHS/solution fixtures are loaded from packaged public compare cases
+- SPECTRE interface-geometry evaluation, where `physics.allrzrz` and free-boundary wall Fourier tables are converted into JAX arrays and evaluated with SPECTRE's radial interpolation rules
 
 The SPEC and SPECTRE fixture workflows are the current parity-oriented paths. The internal geometry workflow is a development and demonstration path. It is not yet a replacement for SPECTRE's full 3D interface-geometry assembly.
 
@@ -74,6 +75,12 @@ The package currently provides:
   - loads packaged released-SPECTRE matrix/RHS/solution fixtures for linear-solve parity tests
 - `solve_spectre_assembled_numpy`
   - provides the minimal NumPy-returning SPECTRE adapter for already assembled Beltrami matrices
+- `solve_spectre_beltrami_branch`
+  - ports SPECTRE's local branch solve, including derivative right-hand sides used by constraint Jacobians
+- `evaluate_spectre_constraints`
+  - evaluates the `Lconstraint` residual/Jacobian branch table once rotational-transform/current diagnostics are supplied
+- `build_spectre_interface_geometry`, `interpolate_spectre_volume_geometry`, `evaluate_spectre_volume_coordinates`
+  - provide the first JAX-native SPECTRE interface-geometry layer: Fourier interfaces, volume interpolation, coordinates, Jacobian, and metric tensor
 - `save_problem_json`, `load_problem_json`, `save_nonlinear_solution`
   - handle user-facing input and output files for standalone workflows
 

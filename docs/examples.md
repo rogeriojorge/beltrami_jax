@@ -5,7 +5,7 @@ The repository includes executable examples under `examples/`. They are designed
 - standalone scripts with parameters at the top
 - verbose in the terminal
 - capable of writing inputs, outputs, and figures under `examples/_generated/`
-- representative of dumped-SPEC, SPECTRE-adapter, and internal-assembly workflows
+- representative of dumped-SPEC, SPECTRE-adapter, SPECTRE-geometry, and internal-assembly workflows
 
 ## Solve the packaged SPEC fixture
 
@@ -128,6 +128,26 @@ This example:
 Committed SPECTRE linear parity figure:
 
 ![SPECTRE linear-system parity](_static/spectre_linear_parity.png)
+
+## SPECTRE interface-geometry probe
+
+Run:
+
+```bash
+./.venv/bin/python examples/spectre_geometry_probe.py
+```
+
+This example:
+
+- loads a packaged SPECTRE TOML compare case
+- builds JAX-native SPECTRE interface Fourier coefficient arrays with `build_spectre_interface_geometry`
+- interpolates a volume with the same coordinate-singularity and linear-interface rules used by SPECTRE `compute_coordinates`
+- evaluates real-space `R`, `Z`, first derivatives, Jacobian, and metric tensor with `evaluate_spectre_volume_coordinates`
+- writes a JSON summary and a geometry/metric panel under `examples/_generated/spectre_geometry_probe/`
+
+Committed SPECTRE geometry probe:
+
+![SPECTRE geometry probe](_static/spectre_geometry_probe.png)
 
 ## Regenerate the committed validation panels
 

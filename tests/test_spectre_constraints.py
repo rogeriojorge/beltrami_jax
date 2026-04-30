@@ -1,0 +1,219 @@
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from beltrami_jax import (
+    SpectreConstraintDiagnostics,
+    SpectreConstraintTargets,
+    evaluate_spectre_constraints,
+    load_all_packaged_spectre_linear_systems,
+    load_packaged_spectre_linear_system,
+    solve_spectre_beltrami_branch,
+    solve_spectre_beltrami_branch_numpy,
+    spectre_branch_unknowns,
+    spectre_constraint_dof_count,
+)
+
+
+def _branch_kwargs(fixture):
+    system = fixture.system
+    return {
+        "d_ma": system.d_ma,
+        "d_md": system.d_md,
+        "d_mb": system.d_mb,
+        "d_mg": system.d_mg,
+        "mu": system.mu,
+        "psi": system.psi,
+        "lconstraint": fixture.lconstraint,
+        "is_vacuum": fixture.is_vacuum,
+        "coordinate_singularity": fixture.coordinate_singularity,
+    }
+
+
+def test_spectre_branch_solve_matches_packaged_primary_solutions() -> None:
+    for fixture in load_all_packaged_spectre_linear_systems():
+        result = solve_spectre_beltrami_branch(**_branch_kwargs(fixture))
+        expected = np.asarray(fixture.expected_solution)
+        relative_error = np.linalg.norm(np.asarray(result.solution) - expected) / max(np.linalg.norm(expected), 1e-300)
+        assert relative_error < 3e-12
+        assert float(result.relative_residual_norms[0]) < 1e-11
+        np.testing.assert_allclose(np.asarray(result.operator), np.asarray(fixture.matrix), rtol=3e-12, atol=3e-12)
+        np.testing.assert_allclose(np.asarray(result.rhs), np.asarray(fixture.rhs), rtol=3e-12, atol=3e-12)
+
+
+def test_spectre_branch_numpy_wrapper_is_adapter_friendly() -> None:
+    fixture = load_packaged_spectre_linear_system("G2V32L1Fi/lvol2")
+    result = solve_spectre_beltrami_branch_numpy(**_branch_kwargs(fixture))
+
+    assert isinstance(result["solution"], np.ndarray)
+    assert isinstance(result["solutions"], np.ndarray)
+    assert isinstance(result["magnetic_energy"], float)
+    assert isinstance(result["magnetic_helicity"], float)
+    assert result["branch_unknowns"] == ("mu", "dpflux")
+    np.testing.assert_allclose(result["solution"], np.asarray(fixture.expected_solution), rtol=3e-12, atol=3e-12)
+
+
+def test_spectre_branch_derivative_rhs_formulas() -> None:
+    plasma = load_packaged_spectre_linear_system("G2V32L1Fi/lvol2")
+    plasma_result = solve_spectre_beltrami_branch(**_branch_kwargs(plasma))
+    np.testing.assert_allclose(
+        np.asarray(plasma_result.derivative_rhs[0]),
+        np.asarray(plasma.system.d_md @ plasma_result.solution),
+        rtol=3e-12,
+        atol=3e-12,
+    )
+    np.testing.assert_allclose(
+        np.asarray(plasma_result.derivative_rhs[1]),
+        -np.asarray(plasma.system.d_mb[:, 1]),
+        rtol=3e-12,
+        atol=3e-12,
+    )
+
+    vacuum = load_packaged_spectre_linear_system("G3V8L3Free/lvol9")
+    vacuum_result = solve_spectre_beltrami_branch(**_branch_kwargs(vacuum))
+    assert vacuum_result.branch_unknowns == ("dtflux", "dpflux")
+    np.testing.assert_allclose(np.asarray(vacuum_result.derivative_rhs[0]), -np.asarray(vacuum.system.d_mb[:, 0]))
+    np.testing.assert_allclose(np.asarray(vacuum_result.derivative_rhs[1]), -np.asarray(vacuum.system.d_mb[:, 1]))
+
+
+def test_spectre_branch_coordinate_singularity_current_branch() -> None:
+    result = solve_spectre_beltrami_branch(
+        d_ma=np.eye(2),
+        d_md=np.zeros((2, 2)),
+        d_mb=np.eye(2),
+        d_mg=np.asarray([0.25, -0.5]),
+        mu=0.0,
+        psi=np.asarray([1.0, 2.0]),
+        lconstraint=-2,
+        is_vacuum=False,
+        coordinate_singularity=True,
+    )
+
+    assert result.branch_unknowns == ("dtflux",)
+    np.testing.assert_allclose(np.asarray(result.solution), np.asarray([-1.25, -1.5]))
+    np.testing.assert_allclose(np.asarray(result.derivative_rhs[0]), np.asarray([-1.0, -0.0]))
+    np.testing.assert_allclose(np.asarray(result.derivative_rhs[1]), np.asarray([0.0, 0.0]))
+
+
+def test_spectre_branch_requires_dmg_when_branch_uses_source() -> None:
+    with pytest.raises(ValueError, match="d_mg is required"):
+        solve_spectre_beltrami_branch(
+            d_ma=np.eye(2),
+            d_md=np.zeros((2, 2)),
+            d_mb=np.eye(2),
+            mu=0.0,
+            psi=np.asarray([1.0, 2.0]),
+            d_mg=None,
+            lconstraint=-2,
+            is_vacuum=False,
+            coordinate_singularity=True,
+        )
+
+
+@pytest.mark.parametrize(
+    ("lconstraint", "is_vacuum", "coordinate_singularity", "expected_count", "expected_unknowns"),
+    [
+        (-2, False, True, 1, ("dtflux",)),
+        (-1, False, False, 0, ()),
+        (0, False, False, 0, ()),
+        (1, False, True, 1, ("mu",)),
+        (1, False, False, 2, ("mu", "dpflux")),
+        (2, False, False, 1, ("mu",)),
+        (3, False, False, 0, ()),
+        (-1, True, False, 0, ()),
+        (0, True, False, 2, ("dtflux", "dpflux")),
+        (1, True, False, 2, ("dtflux", "dpflux")),
+        (2, True, False, 2, ("dtflux", "dpflux")),
+        (3, True, False, 0, ()),
+    ],
+)
+def test_spectre_constraint_dof_table(
+    lconstraint: int,
+    is_vacuum: bool,
+    coordinate_singularity: bool,
+    expected_count: int,
+    expected_unknowns: tuple[str, ...],
+) -> None:
+    assert (
+        spectre_constraint_dof_count(
+            lconstraint=lconstraint,
+            is_vacuum=is_vacuum,
+            coordinate_singularity=coordinate_singularity,
+        )
+        == expected_count
+    )
+    assert (
+        spectre_branch_unknowns(
+            lconstraint=lconstraint,
+            is_vacuum=is_vacuum,
+            coordinate_singularity=coordinate_singularity,
+        )
+        == expected_unknowns
+    )
+
+
+def test_evaluate_spectre_constraints_matches_branch_formulas() -> None:
+    transform = np.asarray([[1.2, 0.3, 0.4], [1.7, 0.5, 0.6]])
+    current = np.asarray([[7.0, 0.1, 0.2], [11.0, 0.3, 0.4]])
+
+    current_branch = evaluate_spectre_constraints(
+        SpectreConstraintTargets(lconstraint=-2, is_vacuum=False, coordinate_singularity=True, curpol=10.0),
+        SpectreConstraintDiagnostics(plasma_current=current),
+    )
+    np.testing.assert_allclose(np.asarray(current_branch.residual), np.asarray([1.0]))
+    np.testing.assert_allclose(np.asarray(current_branch.jacobian), np.asarray([[0.3]]))
+
+    vacuum_current = evaluate_spectre_constraints(
+        SpectreConstraintTargets(lconstraint=0, is_vacuum=True, curtor=6.5, curpol=10.0),
+        SpectreConstraintDiagnostics(plasma_current=current),
+    )
+    np.testing.assert_allclose(np.asarray(vacuum_current.residual), np.asarray([0.5, 1.0]))
+    np.testing.assert_allclose(np.asarray(vacuum_current.jacobian), current[:, 1:3])
+
+    plasma_iota = evaluate_spectre_constraints(
+        SpectreConstraintTargets(lconstraint=1, is_vacuum=False, iota_inner=1.0, iota_outer=1.5),
+        SpectreConstraintDiagnostics(rotational_transform=transform),
+    )
+    np.testing.assert_allclose(np.asarray(plasma_iota.residual), np.asarray([0.2, 0.2]))
+    np.testing.assert_allclose(np.asarray(plasma_iota.jacobian), transform[:, 1:3])
+
+    coordinate_iota = evaluate_spectre_constraints(
+        SpectreConstraintTargets(lconstraint=1, is_vacuum=False, coordinate_singularity=True, iota_outer=1.5),
+        SpectreConstraintDiagnostics(rotational_transform=transform),
+    )
+    np.testing.assert_allclose(np.asarray(coordinate_iota.residual), np.asarray([0.2]))
+    np.testing.assert_allclose(np.asarray(coordinate_iota.jacobian), np.asarray([[0.5]]))
+
+    vacuum_iota_current = evaluate_spectre_constraints(
+        SpectreConstraintTargets(lconstraint=1, is_vacuum=True, iota_inner=1.0, curpol=10.0),
+        SpectreConstraintDiagnostics(rotational_transform=transform, plasma_current=current),
+    )
+    np.testing.assert_allclose(np.asarray(vacuum_iota_current.residual), np.asarray([0.2, 1.0]))
+    np.testing.assert_allclose(np.asarray(vacuum_iota_current.jacobian), np.asarray([[0.3, 0.4], [0.3, 0.4]]))
+
+    helicity = evaluate_spectre_constraints(
+        SpectreConstraintTargets(lconstraint=2, is_vacuum=False, helicity=8.0),
+        SpectreConstraintDiagnostics(helicity=np.asarray(8.25), helicity_derivatives=np.asarray([0.75, 0.0])),
+    )
+    np.testing.assert_allclose(np.asarray(helicity.residual), np.asarray([0.25]))
+    np.testing.assert_allclose(np.asarray(helicity.jacobian), np.asarray([[0.75]]))
+
+
+def test_evaluate_spectre_constraints_zero_and_missing_diagnostics() -> None:
+    zero = evaluate_spectre_constraints(
+        SpectreConstraintTargets(lconstraint=3, is_vacuum=False),
+        SpectreConstraintDiagnostics(),
+    )
+    assert zero.unknowns == ()
+    assert zero.residual.shape == (0,)
+    assert zero.jacobian.shape == (0, 0)
+
+    with pytest.raises(ValueError, match="rotational_transform"):
+        evaluate_spectre_constraints(
+            SpectreConstraintTargets(lconstraint=1, is_vacuum=False, iota_outer=1.0),
+            SpectreConstraintDiagnostics(),
+        )
+
+    with pytest.raises(ValueError, match="unsupported"):
+        spectre_constraint_dof_count(lconstraint=99, is_vacuum=False)

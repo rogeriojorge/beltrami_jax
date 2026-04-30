@@ -119,11 +119,14 @@ Current supported use:
 - read and validate SPECTRE TOML input metadata
 - read SPECTRE HDF5 vector-potential coefficients
 - compare fresh SPECTRE coefficient exports against `reference.h5`
+- evaluate SPECTRE `allrzrz`/wall interface geometry in JAX, including volume interpolation, Jacobian, and metric tensor
 - load packaged public SPECTRE compare cases for reproducible CI validation
 - reconstruct SPECTRE's internal Fourier mode order and packed radial block layout
 - pack and unpack SPECTRE-compatible per-volume solution vectors to/from `Ate`, `Aze`, `Ato`, and `Azo`
 - load released SPECTRE per-volume Beltrami linear systems and solve them with JAX
 - call a narrow JIT-backed backend adapter for already assembled SPECTRE Beltrami matrices
+- solve SPECTRE local Beltrami branches including derivative right-hand sides
+- evaluate the local `Lconstraint` residual/Jacobian table once transform/current diagnostics are supplied
 - use the comparison tooling as the target contract for the future JAX-native backend
 
 Intended future use:
@@ -142,6 +145,9 @@ Current safe entry points:
 - `compare_vector_potentials`
 - `build_spectre_beltrami_layout_for_vector_potential`
 - `build_spectre_dof_layout_for_vector_potential`
+- `build_spectre_interface_geometry`
+- `interpolate_spectre_volume_geometry`
+- `evaluate_spectre_volume_coordinates`
 - `spectre_fourier_modes`
 - `list_packaged_spectre_cases`
 - `load_packaged_spectre_case`
@@ -150,6 +156,8 @@ Current safe entry points:
 - `solve_spectre_assembled`
 - `solve_spectre_assembled_numpy`
 - `solve_spectre_assembled_batch`
+- `solve_spectre_beltrami_branch`
+- `evaluate_spectre_constraints`
 
 Prototype-only entry points:
 
@@ -278,6 +286,83 @@ upstream construction of `dMA`, `dMD`, `dMB`, and `dMG` with JAX-native
 SPECTRE interface-geometry assembly, then unpack the solved vectors through the
 existing SPECTRE `Ate/Aze/Ato/Azo` maps.
 
+## SPECTRE interface-geometry workflow
+
+The first JAX-native SPECTRE assembly ingredient is the coordinate evaluator.
+It consumes SPECTRE TOML metadata and returns the same type of real-space
+geometry quantities used by SPECTRE's `compute_coordinates`/metric path:
+
+```python
+from beltrami_jax import (
+    build_spectre_interface_geometry,
+    evaluate_spectre_volume_coordinates,
+    interpolate_spectre_volume_geometry,
+    load_packaged_spectre_case,
+)
+
+case = load_packaged_spectre_case("G3V8L3Free")
+geometry = build_spectre_interface_geometry(case.input_summary)
+volume = interpolate_spectre_volume_geometry(geometry, lvol=2, s=0.0)
+grid = evaluate_spectre_volume_coordinates(volume, theta=[0.0, 1.0], zeta=[0.0])
+
+print(geometry.interface_count)
+print(grid.jacobian)
+print(grid.metric.shape)
+```
+
+Implemented at this layer:
+
+- SPECTRE internal Fourier mode order.
+- Axis plus `physics.allrzrz.interface_*` rows.
+- Free-boundary wall rows from `rwc/zws/rws/zwc`.
+- Coordinate-singularity interpolation for `Igeometry == 2` and `Igeometry == 3`.
+- Linear interpolation between neighboring interfaces for non-axis volumes.
+- First derivatives, Jacobian, inverse Jacobian, and covariant metric tensor.
+
+This still stops before matrix assembly. The next implementation step is to
+feed these metric quantities into the SPECTRE/SPEC `matrix`/`intghs` integral
+formulas to produce `dMA`, `dMD`, `dMB`, and `dMG` without Fortran.
+
+## SPECTRE branch/constraint workflow
+
+The SPECTRE local solve has branch-specific derivative right-hand sides and an
+outer `Lconstraint` residual table. These are now represented explicitly:
+
+```python
+from beltrami_jax import (
+    SpectreConstraintDiagnostics,
+    SpectreConstraintTargets,
+    evaluate_spectre_constraints,
+    load_packaged_spectre_linear_system,
+    solve_spectre_beltrami_branch,
+)
+
+fixture = load_packaged_spectre_linear_system("G2V32L1Fi/lvol2")
+branch = solve_spectre_beltrami_branch(
+    d_ma=fixture.system.d_ma,
+    d_md=fixture.system.d_md,
+    d_mb=fixture.system.d_mb,
+    d_mg=fixture.system.d_mg,
+    mu=fixture.system.mu,
+    psi=fixture.system.psi,
+    lconstraint=fixture.lconstraint,
+    is_vacuum=fixture.is_vacuum,
+    coordinate_singularity=fixture.coordinate_singularity,
+)
+
+constraints = evaluate_spectre_constraints(
+    SpectreConstraintTargets(lconstraint=1, is_vacuum=False, iota_inner=0.9, iota_outer=0.8),
+    SpectreConstraintDiagnostics(rotational_transform=[[0.91, 0.1, 0.2], [0.82, 0.3, 0.4]]),
+)
+
+print(branch.branch_unknowns)
+print(constraints.residual)
+print(constraints.jacobian)
+```
+
+This makes the branch contract testable before the geometry-derived field
+diagnostics are complete.
+
 ## Minimal SPECTRE backend adapter
 
 The smallest safe SPECTRE-side change is a thin optional adapter after SPECTRE
@@ -320,6 +405,6 @@ Performance notes:
 
 ## Current boundary
 
-The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, and SPECTRE solution-vector packing models, but it is still not a full SPECTRE backend. The main remaining work is JAX-native SPECTRE interface-geometry assembly and full branch-specific constraint logic.
+The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, and SPECTRE local branch/constraint models, but it is still not a full SPECTRE backend. The main remaining work is JAX-native SPECTRE matrix/integral assembly and field diagnostics that produce transform/current constraints directly from solved JAX fields.
 
 See the root-level `SPECTRE_MIGRATION_PLAN.md` for the current SPECTRE replacement plan.

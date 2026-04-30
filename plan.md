@@ -1691,3 +1691,67 @@ Verification after adding the adapter:
 - `./.venv/bin/python -m pytest`
   - `67 passed in 26.21s`
   - total coverage `94.48%`
+
+## 22. 2026-04-30 Addendum: SPECTRE Branch Constraints and Interface Geometry
+
+Goal of this lane:
+
+- Continue the replacement plan instead of opening a PR.
+- Implement the next ingredients needed before SPEC/SPECTRE can be removed:
+  - SPECTRE local branch derivative solves.
+  - `Lconstraint` branch residual/Jacobian formulas.
+  - JAX-native SPECTRE interface geometry evaluation from TOML/allrzrz data.
+
+Files added:
+
+- `src/beltrami_jax/spectre_constraints.py`
+  - `spectre_constraint_dof_count` mirrors SPECTRE `construct_beltrami_field` local `Nxdof` selection for `Lconstraint = -2, -1, 0, 1, 2, 3`.
+  - `spectre_branch_unknowns` returns the branch-local unknown order.
+  - `solve_spectre_beltrami_branch` ports the `solve_beltrami_system` primary solve and derivative RHS solves for plasma, vacuum, and coordinate-singularity current branches.
+  - `evaluate_spectre_constraints` ports local residual/Jacobian formulas once rotational-transform/current/helicity diagnostics are injected.
+- `src/beltrami_jax/spectre_geometry.py`
+  - `build_spectre_interface_geometry` parses SPECTRE axis, `allrzrz.interface_*`, and free-boundary wall rows into internal mode order.
+  - `interpolate_spectre_volume_geometry` implements coordinate-singularity and non-axis radial interpolation.
+  - `evaluate_spectre_volume_coordinates` evaluates `R`, `Z`, first derivatives, Jacobian, inverse Jacobian, and metric tensor in JAX.
+- `tests/test_spectre_constraints.py`
+  - Validates primary branch solve parity on all 19 packaged released-SPECTRE linear systems.
+  - Validates derivative RHS formulas and `dMG` source requirements.
+  - Validates the full local `Lconstraint` unknown-count table.
+  - Validates residual/Jacobian formulas for injected transform/current/helicity diagnostics.
+- `tests/test_spectre_geometry.py`
+  - Validates `allrzrz` plus free-boundary wall parsing on `G3V8L3Free`.
+  - Validates coordinate-singularity interpolation endpoints and exterior wall interpolation.
+  - Validates finite Jacobian/metric, metric symmetry, and autodiff through radial interpolation.
+- `examples/spectre_geometry_probe.py`
+  - Generates `examples/_generated/spectre_geometry_probe/spectre_geometry_probe.png`.
+  - Generates `examples/_generated/spectre_geometry_probe/spectre_geometry_summary.json`.
+- `docs/_static/spectre_geometry_probe.png`
+  - Committed reviewer-facing geometry/Jacobian/metric panel.
+
+Design decisions:
+
+- The branch-constraint layer accepts transform/current/helicity diagnostics as injected arrays. This keeps the branch formulas testable before the JAX-native field diagnostic layer is complete.
+- The geometry layer is SPECTRE-specific and separate from the older large-aspect-ratio teaching geometry. It is the intended foundation for SPECTRE matrix assembly.
+- Free-boundary cases append wall rows from `rwc/zws/rws/zwc` after `allrzrz.interface_n`, matching the extra exterior block represented by `Lrad`.
+- The geometry evaluator currently covers first derivatives and metric quantities. Matrix assembly still needs the radial basis/integral contractions from SPECTRE `matrix`, `matrixBG`, and `intghs`.
+
+What worked:
+
+- The new branch solve reproduces all packaged released-SPECTRE primary solution vectors below `3e-12` relative solution error.
+- The new geometry evaluator loads the packaged `G3V8L3Free` free-boundary input with 9 interfaces and 5 modes, evaluates finite Jacobian/metric arrays, and remains differentiable with respect to the radial interpolation coordinate.
+
+Verification after adding branch constraints and geometry:
+
+- `./.venv/bin/python examples/spectre_geometry_probe.py`
+  - `G3V8L3Free` geometry probe with 9 interfaces and 5 modes
+  - Jacobian range `(7.708043e-02, 8.058717e-02)`
+  - Metric-trace range `(1.520678e+01, 1.854507e+01)`
+- `./.venv/bin/python -m pytest`
+  - `91 passed in 35.40s`
+  - total coverage `93.16%`
+
+Current next lane:
+
+- Port SPECTRE `matrixBG` first because it is lower-dimensional and directly defines the `dMB/dMG` source terms.
+- Then port `matrix`/`intghs` contractions for `dMA/dMD`, using the new `SpectreCoordinateGrid` as the geometry/metric input.
+- Compare JAX-assembled matrix components against packaged released-SPECTRE linear fixtures before attempting an end-to-end coefficient solve.

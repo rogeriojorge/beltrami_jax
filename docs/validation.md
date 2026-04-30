@@ -53,6 +53,10 @@ The released SPECTRE linear-system fixtures generate a per-volume matrix/RHS/sol
 
 ![SPECTRE linear-system parity](_static/spectre_linear_parity.png)
 
+The SPECTRE interface-geometry evaluator generates a geometry/Jacobian/metric probe:
+
+![SPECTRE geometry probe](_static/spectre_geometry_probe.png)
+
 These figures summarize:
 
 - coefficient-level agreement between SPEC and `beltrami_jax`
@@ -63,6 +67,7 @@ These figures summarize:
 - batched parameter-scan throughput
 - SPECTRE `Ate`, `Aze`, `Ato`, and `Azo` HDF5 coefficient parity for public SPECTRE compare cases
 - SPECTRE `dMA`, `dMD`, `dMB`, `dMG`, matrix, RHS, and solved degree-of-freedom parity for released SPECTRE volume solves
+- SPECTRE interface geometry, Jacobian, and metric tensor evaluation from packaged TOML input
 
 Release-gate example outputs generated from the current source tree:
 
@@ -153,6 +158,9 @@ The test suite verifies:
 - Omitting `--use-packaged` compares against a local SPECTRE checkout and local fresh exports when those are present.
 - `solve_spectre_assembled_numpy` is tested as the thin adapter that SPECTRE can call once it has already assembled one Beltrami linear system.
 - `solve_spectre_assembled_batch` is tested on equal-size SPECTRE plasma volumes so repeated same-shape solves have a vectorized path.
+- `build_spectre_interface_geometry` parses SPECTRE `allrzrz` interface rows and free-boundary wall rows from TOML input into internal Fourier mode order.
+- `interpolate_spectre_volume_geometry` is tested for coordinate-singularity and non-axis interpolation consistency.
+- `evaluate_spectre_volume_coordinates` is tested for finite Jacobian/metric values, metric symmetry, and JAX autodiff through the radial interpolation coordinate.
 
 Current public SPECTRE compare-case results:
 
@@ -204,6 +212,8 @@ Current released-SPECTRE linear parity:
 - worst solution relative error: `1.59e-15`
 - worst JAX relative residual norm: `2.56e-12`
 - backend adapter solution parity: below `3e-12` for all packaged fixtures
+- branch-solve solution parity: below `3e-12` for all packaged fixtures
+- branch-solve primary residuals: below `1e-11` for all packaged fixtures, including the ill-conditioned compact free-boundary axis volume
 
 Programmatic access:
 
@@ -220,12 +230,24 @@ for name in list_packaged_spectre_linear_systems():
     print(name, fixture.n_dof, float(result.relative_residual_norm))
 ```
 
+### SPECTRE branch and constraint validation
+
+The SPECTRE branch tests cover the local pieces ported from
+`construct_beltrami_field` and `solve_beltrami_system`:
+
+- `spectre_constraint_dof_count` matches SPECTRE's local `Nxdof` branch table for `Lconstraint = -2, -1, 0, 1, 2, 3`.
+- `solve_spectre_beltrami_branch` reproduces all 19 packaged released-SPECTRE primary solution vectors.
+- plasma, vacuum, and coordinate-singularity-current derivative right-hand-side formulas are checked explicitly.
+- `evaluate_spectre_constraints` checks residual/Jacobian formulas for current, rotational-transform, helicity, no-iteration, and global-constraint branches using injected diagnostic arrays.
+
+This validates the branch contract before the JAX-native field diagnostic layer is complete.
+
 ## Coverage target
 
 The repository enforces a coverage threshold in `pyproject.toml`:
 
 - required line coverage: at least 90%
-- current release-gate result: `67 passed` with `94.48%` line coverage
+- current release-gate result: `91 passed` with `93.16%` line coverage
 
 ## Known validation gaps
 
@@ -235,8 +257,10 @@ Remaining validation work includes:
 
 - comparisons against later SPECTRE integration points beyond exported matrix/RHS/solution fixtures
 - JAX-native generation of SPECTRE HDF5 vector-potential coefficients `vector_potential/Ate`, `Aze`, `Ato`, and `Azo`
+- JAX-native assembly of SPECTRE `dMA`, `dMD`, `dMB`, and `dMG` from the new geometry/metric layer
+- JAX-native transform/current diagnostics from solved fields rather than injected diagnostic arrays
 - broader 3D fixture coverage closer to anticipated SPECTRE use cases
-- branch-specific parity checks once public SPECTRE source can be compared directly
+- end-to-end SPECTRE fork integration once matrix assembly and diagnostics are complete
 
 ## Why exact dense regression matters
 

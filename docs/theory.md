@@ -102,6 +102,111 @@ $$
 \mathbf{r} = -\mathbf{G} - \mathbf{B}\boldsymbol{\psi}.
 $$
 
+## SPECTRE interface geometry
+
+SPECTRE represents interfaces with Fourier coefficients in cylindrical or
+toroidal coordinates. For a mode pair $(m,n)$ and field-period-scaled toroidal
+mode $n_\mathrm{int}=n\,N_\mathrm{fp}$, `beltrami_jax` evaluates
+
+$$
+R(\theta,\zeta) =
+\sum_{m,n}
+R^c_{mn}\cos(m\theta - n_\mathrm{int}\zeta)
++
+R^s_{mn}\sin(m\theta - n_\mathrm{int}\zeta),
+$$
+
+$$
+Z(\theta,\zeta) =
+\sum_{m,n}
+Z^c_{mn}\cos(m\theta - n_\mathrm{int}\zeta)
++
+Z^s_{mn}\sin(m\theta - n_\mathrm{int}\zeta).
+$$
+
+For non-axis volumes, SPECTRE uses a local radial coordinate $s\in[-1,1]$ and
+linear interpolation between neighboring interfaces:
+
+$$
+C_{mn}(s) = \frac{1-s}{2}C_{mn}^{\mathrm{left}}
+          + \frac{1+s}{2}C_{mn}^{\mathrm{right}}.
+$$
+
+For the coordinate-singularity volume, SPECTRE uses regularizing radial powers.
+With $\bar{s}=(s+1)/2$, the current implementation mirrors the public SPECTRE
+rules:
+
+$$
+f_m(\bar{s}) =
+\begin{cases}
+\bar{s}, & I_\mathrm{geometry}=2,\ m=0,\\
+\bar{s}^{m+1}, & I_\mathrm{geometry}=2,\ m>0,\\
+\bar{s}^2, & I_\mathrm{geometry}=3,\ m=0,\\
+\bar{s}^{m}, & I_\mathrm{geometry}=3,\ m>0,
+\end{cases}
+$$
+
+and
+
+$$
+C_{mn}(s) = C_{mn}^{\mathrm{axis}}
+          + \left(C_{mn}^{\mathrm{interface}} - C_{mn}^{\mathrm{axis}}\right)
+            f_m(\bar{s}).
+$$
+
+The resulting coordinate derivatives build the Jacobian and metric tensor used
+by the future SPECTRE matrix integrals. For toroidal geometry,
+
+$$
+J = R\left(Z_s R_\theta - R_s Z_\theta\right),
+$$
+
+and the nonzero covariant metric entries are assembled from dot products of
+the coordinate derivatives, with
+
+$$
+g_{\zeta\zeta}
+= R_\zeta^2 + Z_\zeta^2 + R^2.
+$$
+
+The current JAX implementation covers this interface-geometry layer. It still
+does not assemble SPECTRE's `dMA`, `dMD`, `dMB`, and `dMG` matrices from these
+metric quantities.
+
+## SPECTRE branch derivatives and constraints
+
+SPECTRE solves additional right-hand sides with the same matrix factorization
+to compute derivatives needed by local constraints. In plasma regions,
+
+$$
+\frac{\partial \mathbf{a}}{\partial \mu}
+=
+\mathbf{M}^{-1}\mathbf{D}\mathbf{a},
+\qquad
+\frac{\partial \mathbf{a}}{\partial \Delta\psi_p}
+=
+-\mathbf{M}^{-1}\mathbf{B}\begin{bmatrix}0\\1\end{bmatrix}.
+$$
+
+In vacuum regions, the derivative unknowns are the toroidal and poloidal flux
+increments:
+
+$$
+\frac{\partial \mathbf{a}}{\partial \Delta\psi_t}
+=
+-\mathbf{A}^{-1}\mathbf{B}\begin{bmatrix}1\\0\end{bmatrix},
+\qquad
+\frac{\partial \mathbf{a}}{\partial \Delta\psi_p}
+=
+-\mathbf{A}^{-1}\mathbf{B}\begin{bmatrix}0\\1\end{bmatrix}.
+$$
+
+For the coordinate-singularity current branch `Lconstraint == -2`, the local
+unknown is $\Delta\psi_t$ and the source term includes $\mathbf{G}$. The
+constraint residual/Jacobian table in `evaluate_spectre_constraints` mirrors
+SPECTRE's branch formulas once rotational-transform and plasma-current
+diagnostics are supplied by a field evaluator.
+
 ## Internal assembly model in `beltrami_jax`
 
 The internal workflow in this repository constructs a packed Fourier basis over a shaped large-aspect-ratio torus. At the continuous level, the assembled operators approximate
@@ -197,8 +302,10 @@ Because the solve is written in JAX primitives, scalar objectives depending on t
 The repository now covers the supported Beltrami workflow end to end:
 
 - internal geometry/integral assembly for a Fourier large-aspect-ratio torus
+- SPECTRE interface-Fourier coordinate interpolation, Jacobian, and metric evaluation
 - dense and GMRES linear solves
+- SPECTRE local branch derivative solves and `Lconstraint` residual/Jacobian formulas with injected diagnostics
 - a helicity-constrained outer update for `mu`
 - axis-regularized basis handling near the coordinate singularity
 
-What still remains outside the current implementation is exact parity with every SPEC/SPECTRE branch, including additional auxiliary matrices and branch-specific geometric terms that appear in the legacy Fortran.
+What still remains outside the current implementation is exact JAX-native SPECTRE matrix assembly and field diagnostics from the interface geometry, including the auxiliary integral terms needed to produce `Ate/Aze/Ato/Azo` directly without SPECTRE assembly.

@@ -923,3 +923,33 @@ Do not claim SPECTRE Beltrami replacement until all of these are true:
 - The SPECTRE fork can switch between Fortran and JAX backend with one flag.
 - CI runs unit tests, docs, examples, and validation asset generation.
 - README and docs clearly state exactly what input is supported and what is still experimental.
+
+## 13. 2026-04-30 Progress: Branch Constraints and Interface Geometry
+
+New completed ingredients:
+
+- Added `src/beltrami_jax/spectre_constraints.py`.
+  - Ports SPECTRE local `Nxdof` selection for `Lconstraint = -2, -1, 0, 1, 2, 3`.
+  - Solves SPECTRE branch derivative right-hand sides for plasma, vacuum, and coordinate-singularity current branches.
+  - Evaluates local `Lconstraint` residual/Jacobian formulas once rotational-transform/current/helicity diagnostics are supplied.
+- Added `src/beltrami_jax/spectre_geometry.py`.
+  - Builds SPECTRE interface Fourier geometry arrays in internal `gi00ab` mode order.
+  - Parses `physics.allrzrz.interface_*` rows and appends free-boundary wall rows from `rwc/zws/rws/zwc`.
+  - Implements SPECTRE coordinate-singularity interpolation for `Igeometry == 2` and `Igeometry == 3`.
+  - Implements non-axis linear interpolation between interfaces.
+  - Evaluates `R`, `Z`, first derivatives, Jacobian, inverse Jacobian, and covariant metric tensor in JAX.
+- Added `examples/spectre_geometry_probe.py`.
+  - Produces a SPECTRE interface/Jacobian/metric panel for the packaged `G3V8L3Free` free-boundary case.
+
+What this closes:
+
+- The branch/constraint orchestration is no longer just prose. It has a tested JAX representation.
+- The SPECTRE-specific geometry input is no longer only TOML metadata. It can now be evaluated in JAX with differentiable radial interpolation.
+- The next matrix-assembly work can target a concrete `SpectreCoordinateGrid` contract instead of re-parsing TOML.
+
+What remains:
+
+- Port SPECTRE/SPEC `matrix`, `matrixBG`, and `intghs` integral formulas onto the new `SpectreCoordinateGrid`.
+- Add JAX-native field diagnostics for rotational transform and plasma current instead of injecting diagnostic arrays.
+- Compare JAX-assembled `dMA`, `dMD`, `dMB`, and `dMG` against the packaged released-SPECTRE linear fixtures.
+- Solve those JAX-assembled systems, unpack with the existing `spectre_pack` maps, and compare generated `Ate/Aze/Ato/Azo` against SPECTRE `reference.h5`.

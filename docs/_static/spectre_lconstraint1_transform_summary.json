@@ -1,0 +1,111 @@
+{
+  "case": "G2V32L1Fi",
+  "max_iota_abs_error": 6.994405055138486e-15,
+  "max_constraint_residual_norm": 6.994405055138486e-15,
+  "max_state_error": 3.175237850427948e-14,
+  "max_coefficient_global_relative_error": 1.2193474977601576e-14,
+  "volumes": [
+    {
+      "case": "G2V32L1Fi",
+      "lvol": 1,
+      "targets": {
+        "vol 1 outer": 0.9696969696969446
+      },
+      "computed_iota": {
+        "vol 1 outer": 0.9696969696969447
+      },
+      "local_constraint_residual_norm": 1.1102230246251565e-16,
+      "mu": 1.8847340692562775,
+      "spectre_mu": 1.8847340692563082,
+      "psi": [
+        0.02847379556313043,
+        0.0
+      ],
+      "spectre_psi": [
+        0.02847379556313043,
+        0.0
+      ],
+      "state_max_abs_error": 3.064215547965432e-14,
+      "coefficient_global_relative_error": 1.2193474977601576e-14,
+      "linear_relative_residual_norm": 2.861793611526455e-13
+    },
+    {
+      "case": "G2V32L1Fi",
+      "lvol": 2,
+      "targets": {
+        "vol 2 inner": 0.9696969696969446,
+        "vol 2 outer": 0.9411764705881904
+      },
+      "computed_iota": {
+        "vol 2 inner": 0.9696969696969433,
+        "vol 2 outer": 0.9411764705881974
+      },
+      "local_constraint_residual_norm": 6.994405055138486e-15,
+      "mu": 1.6389938722240707,
+      "spectre_mu": 1.638993872224039,
+      "psi": [
+        0.08527410682260421,
+        0.07973035458035554
+      ],
+      "spectre_psi": [
+        0.08527410682260421,
+        0.07973035458035471
+      ],
+      "state_max_abs_error": 3.175237850427948e-14,
+      "coefficient_global_relative_error": 2.2317720470941425e-15,
+      "linear_relative_residual_norm": 2.523575574630682e-13
+    },
+    {
+      "case": "G2V32L1Fi",
+      "lvol": 3,
+      "targets": {
+        "vol 3 inner": 0.9411764705881904,
+        "vol 3 outer": 0.9142857142856815
+      },
+      "computed_iota": {
+        "vol 3 inner": 0.9411764705881909,
+        "vol 3 outer": 0.9142857142856818
+      },
+      "local_constraint_residual_norm": 4.440892098500626e-16,
+      "mu": 1.3333404841713765,
+      "spectre_mu": 1.3333404841713556,
+      "psi": [
+        0.14165840509499006,
+        0.12942602688381713
+      ],
+      "spectre_psi": [
+        0.14165840509499006,
+        0.12942602688381633
+      ],
+      "state_max_abs_error": 2.0872192862952943e-14,
+      "coefficient_global_relative_error": 1.4538275370066952e-15,
+      "linear_relative_residual_norm": 2.199801195428863e-13
+    },
+    {
+      "case": "G2V32L1Fi",
+      "lvol": 4,
+      "targets": {
+        "vol 4 inner": 0.9142857142856815,
+        "vol 4 outer": 0.8888888888888822
+      },
+      "computed_iota": {
+        "vol 4 inner": 0.9142857142856812,
+        "vol 4 outer": 0.8888888888888818
+      },
+      "local_constraint_residual_norm": 3.3306690738754696e-16,
+      "mu": 1.0569546284644005,
+      "spectre_mu": 1.0569546284643936,
+      "psi": [
+        0.19742133660433595,
+        0.17603696701569485
+      ],
+      "spectre_psi": [
+        0.19742133660433595,
+        0.1760369670156945
+      ],
+      "state_max_abs_error": 6.8833827526759706e-15,
+      "coefficient_global_relative_error": 1.546926340814461e-15,
+      "linear_relative_residual_norm": 7.636967673835032e-14
+    }
+  ]
+}

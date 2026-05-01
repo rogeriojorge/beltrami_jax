@@ -38,7 +38,6 @@ from .spectre_constraints import (
     SpectreConstraintEvaluation,
     SpectreConstraintTargets,
     SpectreLocalConstraintEvaluation,
-    SpectreRotationalTransformDiagnostic,
     evaluate_spectre_helicity_constraint,
     evaluate_spectre_constraints,
     evaluate_spectre_local_constraints,
@@ -48,7 +47,12 @@ from .spectre_constraints import (
     spectre_constraint_dof_count,
     spectre_local_unknown_count,
 )
-from .spectre_diagnostics import SpectrePlasmaCurrentDiagnostic, compute_spectre_plasma_current
+from .spectre_diagnostics import (
+    SpectrePlasmaCurrentDiagnostic,
+    SpectreRotationalTransformDiagnostic,
+    compute_spectre_plasma_current,
+    compute_spectre_rotational_transform,
+)
 from .spectre_geometry import (
     SpectreCoordinateGrid,
     SpectreInterfaceGeometry,
@@ -227,6 +231,7 @@ __all__ = [
     "compare_against_reference",
     "compare_vector_potentials",
     "compute_spectre_plasma_current",
+    "compute_spectre_rotational_transform",
     "compute_solve_diagnostics",
     "evaluate_spectre_constraints",
     "evaluate_spectre_helicity_constraint",

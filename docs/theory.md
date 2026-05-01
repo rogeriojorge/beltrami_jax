@@ -267,6 +267,62 @@ constraint residual/Jacobian table in `evaluate_spectre_constraints` mirrors
 SPECTRE's branch formulas once rotational-transform and plasma-current
 diagnostics are supplied by a field evaluator.
 
+For local rotational-transform constraints, SPECTRE constructs a straight-field-line
+angle correction in Fourier space. On an interface, the radial derivatives of
+the vector-potential components are first evaluated as
+
+$$
+A'_\theta(m,n) = \partial_s A_\theta(m,n),
+\qquad
+A'_\zeta(m,n) = -\partial_s A_\zeta(m,n),
+$$
+
+with the same Chebyshev or Zernike endpoint basis used by SPECTRE. The unknown
+Fourier vector $\lambda$ is then obtained from a dense linear system
+
+$$
+\mathbf{T}\lambda = \mathbf{b},
+$$
+
+where the first component $\lambda_0$ is the measured rotational transform
+$\iota$ on that interface. The SPECTRE Fourier branch fills
+
+$$
+b_k = A'_\zeta(k),
+\qquad
+T_{k0} = A'_\theta(k),
+$$
+
+and for nonzero straight-field-line modes $j=(m_j,n_j)$ adds convolution terms
+of the form
+
+$$
+\frac{1}{2}\left(-m_j A'_\zeta(k)+n_j A'_\theta(k)\right)
+$$
+
+to the $k+j$ and $k-j$ rows. `compute_spectre_rotational_transform` ports this
+`Lsparse=0/3` Fourier branch for validated stellarator-symmetric inputs. For
+derivatives, it solves
+
+$$
+\mathbf{T}\,\partial_x\lambda
+=
+\partial_x\mathbf{b} - \partial_x\mathbf{T}\lambda,
+$$
+
+matching SPECTRE's `DGEMV` correction before the derivative solve. The local
+`Lconstraint=1` residuals then use SPECTRE's target indexing:
+
+$$
+F =
+\begin{bmatrix}
+\iota_{\mathrm{inner}} - \mathrm{oita}(lvol-1)\\
+\iota_{\mathrm{outer}} - \mathrm{iota}(lvol)
+\end{bmatrix},
+$$
+
+with the coordinate-axis branch using only the outer residual.
+
 ## Internal assembly model in `beltrami_jax`
 
 The internal workflow in this repository constructs a packed Fourier basis over a shaped large-aspect-ratio torus. At the continuous level, the assembled operators approximate
@@ -364,10 +420,10 @@ The repository now covers the supported Beltrami workflow end to end:
 - internal geometry/integral assembly for a Fourier large-aspect-ratio torus
 - SPECTRE interface-Fourier coordinate interpolation, Jacobian, and metric evaluation
 - SPECTRE radial basis/quadrature, metric-integral tensors, and `dMA/dMD` matrix contraction for packaged cylindrical, toroidal, free-boundary, and vacuum branches
-- SPECTRE TOML-to-volume and TOML-to-full-coefficient solves that unpack directly to `Ate/Aze/Ato/Azo` for validated branches when supplied the same post-constraint state used by SPECTRE
+- SPECTRE TOML-to-volume and TOML-to-full-coefficient solves that unpack directly to `Ate/Aze/Ato/Azo` for validated branches
 - dense and GMRES linear solves
-- SPECTRE local branch derivative solves and `Lconstraint` residual/Jacobian formulas with injected diagnostics
+- SPECTRE local branch derivative solves and `Lconstraint` residual/Jacobian formulas with JAX current and rotational-transform diagnostics for validated branches
 - a helicity-constrained outer update for `mu`
 - axis-regularized basis handling near the coordinate singularity
 
-What still remains outside the current implementation is field diagnostics from the interface geometry, including rotational transform/current evaluation and the nonlinear updates needed to produce final `Ate/Aze/Ato/Azo` directly without injected SPECTRE solve metadata.
+What still remains outside the current implementation is the global/semi-global SPECTRE nonlinear update layer, non-stellarator-symmetric transform/current branches, and broader fixture coverage needed before the SPECTRE fork can remove its Fortran Beltrami path by default.

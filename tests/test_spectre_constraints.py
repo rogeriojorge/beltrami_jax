@@ -317,7 +317,7 @@ def test_evaluate_spectre_local_constraint_branches_from_toml_targets() -> None:
         solve=solve,
         transform=transform,
     )
-    np.testing.assert_allclose(np.asarray(iota_eval.residual), np.asarray([0.25, 0.3]))
+    np.testing.assert_allclose(np.asarray(iota_eval.residual), np.asarray([0.15, 0.2]))
     np.testing.assert_allclose(np.asarray(iota_eval.jacobian), np.asarray([[0.5, 0.6], [0.7, 0.8]]))
 
     vacuum_iota_summary = _summary_for_local_constraints(lconstraint=1, nvol=1, free_boundary=True)
@@ -330,7 +330,7 @@ def test_evaluate_spectre_local_constraint_branches_from_toml_targets() -> None:
         transform=transform,
         currents=current,
     )
-    np.testing.assert_allclose(np.asarray(vacuum_iota_eval.residual), np.asarray([0.25, 1.0]))
+    np.testing.assert_allclose(np.asarray(vacuum_iota_eval.residual), np.asarray([0.15, 1.0]))
     np.testing.assert_allclose(np.asarray(vacuum_iota_eval.jacobian), np.asarray([[0.5, 0.6], [0.3, 0.4]]))
 
 

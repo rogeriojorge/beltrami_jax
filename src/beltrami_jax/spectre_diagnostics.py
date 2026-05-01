@@ -57,6 +57,21 @@ class SpectrePlasmaCurrentDiagnostic:
         return self.currents[1]
 
 
+@dataclass(frozen=True)
+class SpectreRotationalTransformDiagnostic:
+    """SPECTRE straight-field-line rotational transform on volume interfaces.
+
+    ``iota`` stores ``[inner, outer]`` interface values. Entries that SPECTRE
+    does not define for a branch, such as the coordinate axis or vacuum outer
+    computational boundary, are left as zero. ``derivative_iota[:, j]`` stores
+    derivatives with respect to the derivative vector-potential block ``j``.
+    """
+
+    iota: Array
+    derivative_iota: Array
+    lvol: int = 0
+
+
 def _endpoint_basis(
     *,
     lrad: int,
@@ -98,6 +113,137 @@ def _evaluate_series(
 ) -> Array:
     phase = poloidal_modes[:, None, None] * theta[None, :, None] - toroidal_modes[:, None, None] * zeta[None, None, :]
     return jnp.sum(even_cos[:, None, None] * jnp.cos(phase) + odd_sin[:, None, None] * jnp.sin(phase), axis=0)
+
+
+def _transform_resolution(summary: SpectreInputSummary) -> tuple[int, int]:
+    mpol = int(summary.numeric.get("impol", summary.mpol))
+    ntor = int(summary.numeric.get("intor", summary.ntor))
+    if mpol <= 0:
+        mpol = summary.mpol - mpol
+    if ntor <= 0:
+        ntor = summary.ntor - ntor
+    if summary.ntor == 0:
+        ntor = 0
+    return mpol, ntor
+
+
+def _spectre_modes(mpol: int, ntor: int, nfp: int) -> tuple[tuple[int, int], ...]:
+    modes: list[tuple[int, int]] = []
+    for n in range(ntor + 1):
+        modes.append((0, n * nfp))
+    for m in range(1, mpol + 1):
+        for n in range(-ntor, ntor + 1):
+            modes.append((m, n * nfp))
+    return tuple(modes)
+
+
+def _mode_index(modes: tuple[tuple[int, int], ...]) -> dict[tuple[int, int], int]:
+    return {mode: index for index, mode in enumerate(modes)}
+
+
+def _transform_endpoint_coefficients(
+    vector_potential: SpectreVectorPotential,
+    *,
+    volume_map: SpectreVolumeDofMap,
+    innout: int,
+) -> tuple[Array, Array]:
+    mpol = int(np.max(volume_map.poloidal_modes)) if volume_map.poloidal_modes.size else 0
+    poloidal_modes = jnp.asarray(volume_map.poloidal_modes, dtype=jnp.int32)
+    derivative_basis = _endpoint_basis(
+        lrad=volume_map.block.lrad,
+        mpol=mpol,
+        coordinate_singularity=volume_map.coordinate_singularity,
+        innout=innout,
+        derivative=True,
+    )
+    late = _mode_endpoint_coefficients(vector_potential.ate, derivative_basis, poloidal_modes)
+    laze = -_mode_endpoint_coefficients(vector_potential.aze, derivative_basis, poloidal_modes)
+    return late, laze
+
+
+def _rotational_transform_system(
+    vector_potential: SpectreVectorPotential,
+    *,
+    summary: SpectreInputSummary,
+    volume_map: SpectreVolumeDofMap,
+    innout: int,
+) -> tuple[Array, Array]:
+    if not summary.enforce_stellarator_symmetry:
+        raise NotImplementedError("rotational-transform diagnostic currently supports stellarator-symmetric inputs")
+    transform_mpol, transform_ntor = _transform_resolution(summary)
+    transform_modes = _spectre_modes(transform_mpol, transform_ntor, summary.nfp)
+    transform_index = _mode_index(transform_modes)
+    mode_count = len(transform_modes)
+    matrix = jnp.zeros((mode_count, mode_count), dtype=jnp.float64)
+    rhs = jnp.zeros((mode_count,), dtype=jnp.float64)
+    late, laze = _transform_endpoint_coefficients(
+        vector_potential,
+        volume_map=volume_map,
+        innout=innout,
+    )
+    source_modes = tuple((int(m), int(n)) for m, n in zip(volume_map.poloidal_modes, volume_map.toroidal_modes))
+
+    for kk, (mk, nk) in enumerate(source_modes):
+        direct = transform_index.get((mk, nk))
+        if direct is not None:
+            rhs = rhs.at[direct].set(laze[kk])
+            matrix = matrix.at[direct, 0].set(late[kk])
+        for jj, (mj, nj) in enumerate(transform_modes[1:], start=1):
+            add_index = transform_index.get((mk + mj, nk + nj))
+            value = 0.5 * (-float(mj) * laze[kk] + float(nj) * late[kk])
+            if add_index is not None:
+                matrix = matrix.at[add_index, jj].add(value)
+
+            delta_m = mk - mj
+            delta_n = nk - nj
+            if delta_m > 0 or (delta_m == 0 and delta_n >= 0):
+                sub_mode = (delta_m, delta_n)
+            else:
+                sub_mode = (-delta_m, -delta_n)
+            sub_index = transform_index.get(sub_mode)
+            if sub_index is not None:
+                matrix = matrix.at[sub_index, jj].add(value)
+    return matrix, rhs
+
+
+def _solve_transform_system(matrix: Array, rhs: Array, *, use_svd: bool) -> Array:
+    if use_svd:
+        return jnp.linalg.lstsq(matrix, rhs, rcond=None)[0]
+    return jnp.linalg.solve(matrix, rhs)
+
+
+def _compute_transform_on_interface(
+    vector_potential: SpectreVectorPotential,
+    derivative_vector_potentials: tuple[SpectreVectorPotential, ...],
+    *,
+    summary: SpectreInputSummary,
+    volume_map: SpectreVolumeDofMap,
+    innout: int,
+    use_svd: bool,
+) -> tuple[Array, Array]:
+    matrix, rhs = _rotational_transform_system(
+        vector_potential,
+        summary=summary,
+        volume_map=volume_map,
+        innout=innout,
+    )
+    transform_solution = _solve_transform_system(matrix, rhs, use_svd=use_svd)
+    derivative_values: list[Array] = []
+    for derivative_vector_potential in derivative_vector_potentials:
+        derivative_matrix, derivative_rhs = _rotational_transform_system(
+            derivative_vector_potential,
+            summary=summary,
+            volume_map=volume_map,
+            innout=innout,
+        )
+        corrected_rhs = derivative_rhs - derivative_matrix @ transform_solution
+        derivative_solution = _solve_transform_system(matrix, corrected_rhs, use_svd=use_svd)
+        derivative_values.append(derivative_solution[0])
+    if derivative_values:
+        derivatives = jnp.asarray(derivative_values, dtype=jnp.float64)
+    else:
+        derivatives = jnp.zeros((0,), dtype=jnp.float64)
+    return transform_solution[0], derivatives
 
 
 def _boundary_fields(
@@ -274,4 +420,56 @@ def compute_spectre_plasma_current(
         innout=innout,
         currents=currents,
         derivative_currents=derivative_currents,
+    )
+
+
+def compute_spectre_rotational_transform(
+    summary: SpectreInputSummary,
+    *,
+    lvol: int,
+    vector_potential: SpectreVectorPotential,
+    derivative_vector_potentials: tuple[SpectreVectorPotential, ...] = (),
+    volume_map: SpectreVolumeDofMap | None = None,
+    use_svd: bool | None = None,
+) -> SpectreRotationalTransformDiagnostic:
+    """Compute SPECTRE's Fourier-space rotational-transform diagnostic.
+
+    This ports the ``Lsparse=0``/``Lsparse=3`` branch of
+    ``magnetic_field_mod.F90::compute_rotational_transform`` for
+    stellarator-symmetric inputs. The returned derivatives use the same
+    derivative vector-potential blocks as :func:`solve_spectre_assembled`.
+    """
+
+    if lvol < 1 or lvol > summary.packed_volume_count:
+        raise ValueError(f"lvol={lvol} outside 1..{summary.packed_volume_count}")
+    lsparse = int(summary.numeric.get("lsparse", 0))
+    if lsparse not in (0, 3):
+        raise NotImplementedError(f"rotational-transform diagnostic supports Lsparse=0 or 3, got {lsparse}")
+    if volume_map is None:
+        volume_map = build_spectre_dof_layout(summary).volume_maps[lvol - 1]
+    if use_svd is None:
+        use_svd = int(summary.numeric.get("lsvdiota", 0)) == 1
+
+    values = jnp.zeros((2,), dtype=jnp.float64)
+    derivative_values = jnp.zeros((2, len(derivative_vector_potentials)), dtype=jnp.float64)
+    for innout in (0, 1):
+        if volume_map.coordinate_singularity and innout == 0:
+            continue
+        if volume_map.vacuum_region and innout == 1:
+            continue
+        value, derivatives = _compute_transform_on_interface(
+            vector_potential,
+            derivative_vector_potentials,
+            summary=summary,
+            volume_map=volume_map,
+            innout=innout,
+            use_svd=bool(use_svd),
+        )
+        values = values.at[innout].set(value)
+        if derivative_vector_potentials:
+            derivative_values = derivative_values.at[innout, :].set(derivatives)
+    return SpectreRotationalTransformDiagnostic(
+        lvol=lvol,
+        iota=values,
+        derivative_iota=derivative_values,
     )

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -13,6 +15,7 @@ from beltrami_jax import (
     build_spectre_interface_geometry,
     chebyshev_basis,
     compute_spectre_plasma_current,
+    compute_spectre_rotational_transform,
     load_packaged_spectre_case,
     load_packaged_spectre_linear_system,
     solve_spectre_assembled,
@@ -279,6 +282,54 @@ def test_spectre_plasma_current_diagnostic_uses_solution_derivatives() -> None:
         compute_spectre_plasma_current(case.input_summary, lvol=99, vector_potential=result.vector_potential)
 
 
+def test_spectre_rotational_transform_diagnostic_matches_lconstraint1_targets() -> None:
+    case = load_packaged_spectre_case("G2V32L1Fi")
+    dof_layout = build_spectre_dof_layout(case.input_summary)
+    bulk_result = None
+
+    for lvol in range(1, case.input_summary.packed_volume_count + 1):
+        fixture = load_packaged_spectre_linear_system(case_label=case.label, volume_index=lvol)
+        result = solve_spectre_volume_from_input(
+            case.input_summary,
+            lvol=lvol,
+            mu=fixture.system.mu,
+            psi=fixture.system.psi,
+        )
+        if lvol == 2:
+            bulk_result = result
+        transform = compute_spectre_rotational_transform(
+            case.input_summary,
+            lvol=lvol,
+            vector_potential=result.vector_potential,
+            derivative_vector_potentials=result.derivative_vector_potentials,
+            volume_map=dof_layout.volume_maps[lvol - 1],
+        )
+
+        assert transform.derivative_iota.shape == (2, 2)
+        if lvol == 1:
+            np.testing.assert_allclose(np.asarray(transform.iota[1]), case.input_summary.constraints["iota"][1])
+        else:
+            np.testing.assert_allclose(np.asarray(transform.iota[0]), case.input_summary.constraints["oita"][lvol - 1])
+            np.testing.assert_allclose(np.asarray(transform.iota[1]), case.input_summary.constraints["iota"][lvol])
+        assert np.all(np.isfinite(np.asarray(transform.derivative_iota)))
+
+    assert bulk_result is not None
+    no_derivative = compute_spectre_rotational_transform(
+        case.input_summary,
+        lvol=2,
+        vector_potential=bulk_result.vector_potential,
+        volume_map=dof_layout.volume_maps[1],
+    )
+    assert no_derivative.derivative_iota.shape == (2, 0)
+
+    with pytest.raises(ValueError, match="outside"):
+        compute_spectre_rotational_transform(case.input_summary, lvol=99, vector_potential=bulk_result.vector_potential)
+
+    unsupported_summary = replace(case.input_summary, numeric={**case.input_summary.numeric, "lsparse": 1})
+    with pytest.raises(NotImplementedError, match="Lsparse"):
+        compute_spectre_rotational_transform(unsupported_summary, lvol=2, vector_potential=bulk_result.vector_potential)
+
+
 def test_spectre_lconstraint2_local_helicity_solve_is_satisfied_at_reference_state() -> None:
     case = load_packaged_spectre_case("G3V3L2Fi_stability")
     lvol = 2
@@ -318,15 +369,43 @@ def test_spectre_zero_unknown_local_constraint_solve_returns_constraint_record()
     np.testing.assert_allclose(np.asarray(result.solution), np.asarray(fixture.expected_solution), rtol=3e-12, atol=5e-11)
 
 
-def test_spectre_local_constraint_solve_rejects_open_rotational_transform_branch() -> None:
+def test_spectre_lconstraint1_local_transform_solve_matches_spectre_reference_state() -> None:
     case = load_packaged_spectre_case("G2V32L1Fi")
-    with pytest.raises(NotImplementedError, match="Lconstraint=2 helicity"):
-        solve_spectre_volume_from_input(
-            case.input_summary,
-            lvol=2,
-            solve_local_constraints=True,
-            max_constraint_iterations=1,
-        )
+    lvol = 2
+    fixture = load_packaged_spectre_linear_system(case_label=case.label, volume_index=lvol)
+
+    result = solve_spectre_volume_from_input(
+        case.input_summary,
+        lvol=lvol,
+        solve_local_constraints=True,
+        max_constraint_iterations=8,
+    )
+
+    assert result.constraint is not None
+    assert result.constraint.unknown_count == 2
+    assert float(result.constraint.residual_norm) < 2.0e-12
+    np.testing.assert_allclose(float(result.mu), float(fixture.system.mu), rtol=2e-11, atol=2e-11)
+    np.testing.assert_allclose(np.asarray(result.psi), np.asarray(fixture.system.psi), rtol=2e-11, atol=2e-11)
+    np.testing.assert_allclose(np.asarray(result.solution), np.asarray(fixture.expected_solution), rtol=3e-11, atol=5e-10)
+
+
+def test_spectre_lconstraint1_axis_transform_solve_matches_spectre_reference_state() -> None:
+    case = load_packaged_spectre_case("G2V32L1Fi")
+    lvol = 1
+    fixture = load_packaged_spectre_linear_system(case_label=case.label, volume_index=lvol)
+
+    result = solve_spectre_volume_from_input(
+        case.input_summary,
+        lvol=lvol,
+        solve_local_constraints=True,
+    )
+
+    assert result.constraint is not None
+    assert result.constraint.unknown_count == 1
+    assert float(result.constraint.residual_norm) < 2.0e-12
+    np.testing.assert_allclose(float(result.mu), float(fixture.system.mu), rtol=4e-11, atol=4e-11)
+    np.testing.assert_allclose(np.asarray(result.psi), np.asarray(fixture.system.psi), rtol=2e-12, atol=2e-12)
+    np.testing.assert_allclose(np.asarray(result.solution), np.asarray(fixture.expected_solution), rtol=4e-11, atol=5e-10)
 
 
 def test_spectre_local_constraint_solve_validates_iteration_count() -> None:

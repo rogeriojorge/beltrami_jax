@@ -31,7 +31,7 @@ The package currently supports four complementary workflows:
 - released SPECTRE validation, where TOML/HDF5 coefficient fixtures and per-volume matrix/RHS/solution fixtures are loaded from packaged public compare cases
 - SPECTRE interface-geometry and matrix assembly, where TOML Fourier interfaces, free-boundary wall tables, radial bases, metric integrals, and SPECTRE volume matrices are assembled in JAX
 
-The SPEC and SPECTRE fixture workflows are the current parity-oriented paths. The internal geometry workflow is a development and demonstration path. The SPECTRE path is now the intended replacement route for the Beltrami matrix/linear-solve stage, with remaining work focused on field diagnostics and nonlinear constraint updates.
+The SPEC and SPECTRE fixture workflows are the current parity-oriented paths. The internal geometry workflow is a development and demonstration path. The SPECTRE path is now the intended replacement route for the Beltrami matrix/linear-solve stage, with remaining work focused on global/semi-global constraint updates, broader diagnostic branches, and production scaling.
 
 The package currently provides:
 
@@ -78,7 +78,7 @@ The package currently provides:
 - `solve_spectre_beltrami_branch`
   - ports SPECTRE's local branch solve, including derivative right-hand sides used by constraint Jacobians
 - `evaluate_spectre_constraints`
-  - evaluates the `Lconstraint` residual/Jacobian branch table once rotational-transform/current diagnostics are supplied
+  - evaluates the `Lconstraint` residual/Jacobian branch table using SPECTRE-style transform/current diagnostics
 - `build_spectre_interface_geometry`, `interpolate_spectre_volume_geometry`, `evaluate_spectre_volume_coordinates`
   - provide the first JAX-native SPECTRE interface-geometry layer: Fourier interfaces, volume interpolation, coordinates, Jacobian, and metric tensor
 - `build_spectre_boundary_normal_field`, `assemble_spectre_matrix_bg`, `assemble_spectre_matrix_bg_from_input`
@@ -93,6 +93,8 @@ The package currently provides:
   - solve selected or all packed SPECTRE volumes from TOML/interface geometry and concatenate a full `Ate/Aze/Ato/Azo` coefficient block
 - `compute_spectre_plasma_current`
   - evaluates SPECTRE-style toroidal and poloidal current diagnostics from solved coefficient blocks
+- `compute_spectre_rotational_transform`
+  - evaluates SPECTRE-style straight-field-line rotational transform diagnostics from solved coefficient blocks for validated stellarator-symmetric Fourier branches
 - `evaluate_spectre_helicity_constraint`, `evaluate_spectre_local_constraints`
   - evaluate local SPECTRE constraint residuals/Jacobians from TOML targets and JAX diagnostics
 - `save_problem_json`, `load_problem_json`, `save_nonlinear_solution`
@@ -137,11 +139,11 @@ The example scripts print progress and diagnostics. This is intentional. The goa
 
 ## Current limitations
 
-This package now performs prototype internal geometry assembly, Krylov solves, a helicity-constrained outer loop, SPECTRE matrix assembly, SPECTRE current diagnostics, and selected local SPECTRE constraint updates, but it still does not cover:
+This package now performs prototype internal geometry assembly, Krylov solves, a helicity-constrained outer loop, SPECTRE matrix assembly, SPECTRE current diagnostics, SPECTRE rotational-transform diagnostics for validated stellarator-symmetric Fourier cases, and selected local SPECTRE constraint updates, but it still does not cover:
 
 - every SPEC/SPECTRE branch and auxiliary matrix path
-- SPECTRE rotational-transform diagnostics from solved JAX fields
 - the global/semi-global SPECTRE constraint loop that updates `mu` and fluxes without injected SPECTRE metadata
+- non-stellarator-symmetric SPECTRE rotational-transform/current diagnostic branches
 - broader non-stellarator-symmetric and high-resolution fixture coverage
 - full sparse production scaling
 - the broader equilibrium and constraint machinery beyond the supported Beltrami workflow

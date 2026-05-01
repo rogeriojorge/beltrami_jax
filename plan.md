@@ -1948,3 +1948,79 @@ Current next lane:
 - Implement JAX-native plasma-current diagnostics from solved SPECTRE coefficients and interface metrics.
 - Then implement the rotational-transform diagnostic or an explicitly scoped first subset.
 - Feed diagnostics into the existing `Lconstraint` residual/Jacobian and add a local Newton loop so the public TOML solve no longer needs post-constraint `mu`/`psi` injection.
+
+## 26. 2026-04-30 Addendum: Local Lconstraint=1 Rotational-Transform Closure
+
+Goal of this lane:
+
+- Close the highest-risk remaining local branch: SPECTRE `Lconstraint=1`, which constrains the rotational transform on volume interfaces.
+- Port the Fourier `magnetic_field_mod.F90::compute_rotational_transform` branch used by the public `G2V32L1Fi` case.
+- Use that diagnostic in the TOML-driven local Newton loop so this branch no longer needs injected SPECTRE post-constraint `mu`/`psi` values.
+- Produce a reviewer-facing validation plot for future SPECTRE PR discussion.
+
+Files added:
+
+- `tools/generate_spectre_lconstraint1_validation_assets.py`
+  - Solves all four `G2V32L1Fi` volumes from TOML initial state with `solve_local_constraints=True`.
+  - Computes JAX rotational-transform diagnostics.
+  - Compares interface iota targets, final `mu`/`psi`, and per-volume `Ate/Aze/Ato/Azo` coefficients to released SPECTRE fixtures.
+  - Writes `docs/_static/spectre_lconstraint1_transform.png` and `docs/_static/spectre_lconstraint1_transform_summary.json`.
+
+Files modified:
+
+- `src/beltrami_jax/spectre_diagnostics.py`
+  - Adds `SpectreRotationalTransformDiagnostic`.
+  - Adds `compute_spectre_rotational_transform`.
+  - Ports the SPECTRE `Lsparse=0/3` Fourier straight-field-line angle solve for stellarator-symmetric inputs.
+  - Uses SPECTRE endpoint radial derivatives for Chebyshev/Zernike branches.
+  - Uses derivative correction `rhs_d - matrix_d @ lambda0` before solving derivative transform rows, matching the Fortran `DGEMV` correction.
+- `src/beltrami_jax/spectre_constraints.py`
+  - Uses the diagnostic dataclass from `spectre_diagnostics.py`.
+  - Fixes SPECTRE `iota`/`oita` target indexing: these arrays are written as `0:Mvol`, so the local branch uses `iota(lvol)` and `oita(lvol-1)`.
+- `src/beltrami_jax/spectre_solve.py`
+  - Adds `_solve_transform_constraint`.
+  - Wires `solve_spectre_volume_from_input(..., solve_local_constraints=True)` to solve local `Lconstraint=1`.
+  - Uses SPECTRE `mupfits`/`mupftol` for local Newton settings instead of the unrelated global `c05xtol`.
+- `src/beltrami_jax/__init__.py`
+  - Exports `SpectreRotationalTransformDiagnostic` and `compute_spectre_rotational_transform`.
+- `tests/test_spectre_volume_matrix.py`
+  - Adds direct rotational-transform target tests on `G2V32L1Fi`.
+  - Replaces the old "open rotational-transform branch" rejection test with an actual local Newton parity test.
+- `tests/test_spectre_constraints.py`
+  - Updates synthetic residual expectations for SPECTRE's zero-indexed `iota`/`oita` arrays.
+- `README.md`, `docs/overview.md`, `docs/theory.md`, `docs/integration.md`, `docs/validation.md`, `docs/limitations.md`
+  - Document the new diagnostic, equations, validation boundary, and remaining `Lconstraint=3`/non-stellarator-symmetric gaps.
+
+What worked:
+
+- Direct transform diagnostics from SPECTRE reference states reproduce the expected `G2V32L1Fi` interface iota targets for all four packed volumes.
+- The local Newton loop now solves `G2V32L1Fi` from TOML initial state without injected post-constraint `mu`/`psi`.
+- The validation panel reports:
+  - worst interface transform residual: `6.994e-15`;
+  - worst post-constraint `mu`/`psi` state error versus SPECTRE: `3.175e-14`;
+  - worst per-volume coefficient relative error: `1.219e-14`.
+- The SPECTRE `iota`/`oita` indexing issue was caught by tests and fixed before documenting the branch.
+
+Verification in this lane:
+
+- `./.venv/bin/python -m py_compile src/beltrami_jax/spectre_diagnostics.py src/beltrami_jax/spectre_constraints.py src/beltrami_jax/spectre_solve.py src/beltrami_jax/__init__.py`
+  - passed.
+- Targeted tests:
+  - `./.venv/bin/python -m pytest tests/test_spectre_volume_matrix.py::test_spectre_rotational_transform_diagnostic_matches_lconstraint1_targets tests/test_spectre_volume_matrix.py::test_spectre_lconstraint1_local_transform_solve_matches_spectre_reference_state tests/test_spectre_constraints.py::test_evaluate_spectre_local_constraint_branches_from_toml_targets -q -o addopts=''`
+  - `3 passed in 61.37s`.
+- Validation asset generation:
+  - `./.venv/bin/python tools/generate_spectre_lconstraint1_validation_assets.py`
+  - completed and wrote the new docs figure/summary.
+
+Design decisions:
+
+- The first transform port is explicitly scoped to the SPECTRE Fourier `Lsparse=0/3`, stellarator-symmetric branch used by the public `G2V32L1Fi` validation case.
+- The implementation uses JAX arrays for the transform matrix and solves so the diagnostic remains compatible with autodiff through coefficient inputs, while keeping Python-level mode loops readable and close to the Fortran branch table.
+- The SPECTRE-side force-seam numbers for `G2V32L1Fi` need to be regenerated after wiring the local SPECTRE fork to call this new `solve_local_constraints=True` path; the previous `2.41e-2` force error predates this diagnostic.
+
+Current next lane:
+
+- Re-run the SPECTRE fork `force_real(..., beltrami_backend="jax", solve_local_constraints=True)` on `G2V32L1Fi` using the new transform closure.
+- If that force comparison reaches roundoff, update `docs/_static/spectre_backend_seam_runtime.png`.
+- Implement the `Lconstraint=3` global/semi-global update path.
+- Add non-stellarator-symmetric transform/current fixtures before claiming full backend parity.

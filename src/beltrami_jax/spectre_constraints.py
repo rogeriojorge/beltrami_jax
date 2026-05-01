@@ -10,7 +10,7 @@ from jax import Array
 from jax.typing import ArrayLike
 
 from .spectre_backend import SpectreBackendSolve
-from .spectre_diagnostics import SpectrePlasmaCurrentDiagnostic
+from .spectre_diagnostics import SpectrePlasmaCurrentDiagnostic, SpectreRotationalTransformDiagnostic
 from .spectre_input import SpectreInputSummary
 from .spectre_pack import SpectreVolumeDofMap
 
@@ -81,14 +81,6 @@ class SpectreConstraintEvaluation:
     residual: Array
     jacobian: Array
     unknowns: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class SpectreRotationalTransformDiagnostic:
-    """Rotational-transform values and local derivatives on inner/outer faces."""
-
-    iota: Array
-    derivative_iota: Array
 
 
 @dataclass(frozen=True)
@@ -466,6 +458,12 @@ def _fortran_1_index(values: tuple[float, ...], index: int, *, name: str) -> flo
     return float(values[index - 1])
 
 
+def _fortran_0_index(values: tuple[float, ...], index: int, *, name: str) -> float:
+    if index < 0 or index >= len(values):
+        raise ValueError(f"{name}({index}) is not available; got {len(values)} values")
+    return float(values[index])
+
+
 def _zero_local_eval(
     *,
     summary: SpectreInputSummary,
@@ -533,15 +531,15 @@ def evaluate_spectre_local_constraints(
         oita = summary.constraints["oita"]
         if volume_map.plasma_region and volume_map.coordinate_singularity:
             residual = jnp.asarray(
-                [transform.iota[1] - _fortran_1_index(iota, lvol, name="iota")],
+                [transform.iota[1] - _fortran_0_index(iota, lvol, name="iota")],
                 dtype=jnp.float64,
             )
             jacobian = jnp.asarray([[transform.derivative_iota[1, 0]]], dtype=jnp.float64)
         elif volume_map.plasma_region:
             residual = jnp.asarray(
                 [
-                    transform.iota[0] - _fortran_1_index(oita, lvol - 1, name="oita"),
-                    transform.iota[1] - _fortran_1_index(iota, lvol, name="iota"),
+                    transform.iota[0] - _fortran_0_index(oita, lvol - 1, name="oita"),
+                    transform.iota[1] - _fortran_0_index(iota, lvol, name="iota"),
                 ],
                 dtype=jnp.float64,
             )
@@ -552,7 +550,7 @@ def evaluate_spectre_local_constraints(
             curpol = float(summary.physics.get("curpol", 0.0))
             residual = jnp.asarray(
                 [
-                    transform.iota[0] - _fortran_1_index(oita, lvol - 1, name="oita"),
+                    transform.iota[0] - _fortran_0_index(oita, lvol - 1, name="oita"),
                     currents.poloidal_current - curpol,
                 ],
                 dtype=jnp.float64,

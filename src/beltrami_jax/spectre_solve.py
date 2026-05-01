@@ -18,7 +18,7 @@ from .spectre_constraints import (
     evaluate_spectre_local_constraints,
     spectre_local_unknown_count,
 )
-from .spectre_diagnostics import compute_spectre_plasma_current
+from .spectre_diagnostics import compute_spectre_plasma_current, compute_spectre_rotational_transform
 from .spectre_input import SpectreInputSummary, load_spectre_input_toml
 from .spectre_io import SpectreVectorPotential
 from .spectre_matrix import SpectreBoundaryNormalField
@@ -187,10 +187,21 @@ def _solve_assembled_volume(
 
 
 def _newton_settings(summary: SpectreInputSummary, *, max_constraint_iterations: int | None) -> tuple[int, float]:
-    iterations = int(max_constraint_iterations) if max_constraint_iterations is not None else 12
+    iterations = (
+        int(max_constraint_iterations)
+        if max_constraint_iterations is not None
+        else int(summary.physics.get("mupfits", 12))
+    )
     if iterations < 1:
         raise ValueError("max_constraint_iterations must be positive")
-    tolerance = abs(float(summary.global_options.get("c05xtol", summary.global_options.get("forcetol", 1.0e-12))))
+    tolerance = abs(
+        float(
+            summary.physics.get(
+                "mupftol",
+                summary.global_options.get("c05xtol", summary.global_options.get("forcetol", 1.0e-12)),
+            )
+        )
+    )
     return iterations, max(tolerance, 1.0e-14)
 
 
@@ -332,6 +343,102 @@ def _solve_current_constraint(
     )
 
 
+def _solve_transform_constraint(
+    summary: SpectreInputSummary,
+    *,
+    lvol: int,
+    volume_map: SpectreVolumeDofMap,
+    matrices: SpectreVolumeMatrices,
+    mu: Array,
+    psi: Array,
+    is_vacuum: bool,
+    include_d_mg_in_rhs: bool,
+    max_constraint_iterations: int | None,
+    nt: int | None,
+    nz: int | None,
+    verbose: bool,
+) -> tuple[Array, Array, SpectreBackendSolve, SpectreLocalConstraintEvaluation]:
+    iterations, tolerance = _newton_settings(summary, max_constraint_iterations=max_constraint_iterations)
+    mu_value = jnp.asarray(mu, dtype=jnp.float64)
+    psi_value = jnp.asarray(psi, dtype=jnp.float64)
+    last_solve: SpectreBackendSolve | None = None
+    last_constraint: SpectreLocalConstraintEvaluation | None = None
+    for iteration in range(iterations):
+        last_solve = _solve_assembled_volume(
+            matrices,
+            mu=mu_value,
+            psi=psi_value,
+            is_vacuum=is_vacuum,
+            include_d_mg_in_rhs=include_d_mg_in_rhs,
+        )
+        vector_potential = volume_map.unpack_solution(np.asarray(last_solve.solution), source=f"{summary.source}:lvol{lvol}")
+        derivative_vector_potentials = _unpack_derivative_vector_potentials(
+            volume_map,
+            last_solve,
+            source=f"{summary.source}:lvol{lvol}",
+        )
+        transform = compute_spectre_rotational_transform(
+            summary,
+            lvol=lvol,
+            vector_potential=vector_potential,
+            derivative_vector_potentials=derivative_vector_potentials,
+            volume_map=volume_map,
+        )
+        currents = None
+        if volume_map.vacuum_region:
+            currents = compute_spectre_plasma_current(
+                summary,
+                lvol=lvol,
+                vector_potential=vector_potential,
+                derivative_vector_potentials=derivative_vector_potentials,
+                volume_map=volume_map,
+                innout=0,
+                nt=nt,
+                nz=nz,
+            )
+        last_constraint = evaluate_spectre_local_constraints(
+            summary,
+            lvol=lvol,
+            volume_map=volume_map,
+            solve=last_solve,
+            transform=transform,
+            currents=currents,
+        )
+        residual = np.asarray(last_constraint.residual, dtype=np.float64)
+        jacobian = np.asarray(last_constraint.jacobian, dtype=np.float64)
+        residual_norm = float(np.max(np.abs(residual))) if residual.size else 0.0
+        if verbose:
+            print(
+                "[beltrami_jax] local transform Newton "
+                f"lvol={lvol} iter={iteration} mu={float(mu_value):.12e} "
+                f"psi=({float(psi_value[0]):.12e}, {float(psi_value[1]):.12e}) "
+                f"residual={residual_norm:.3e}"
+            )
+        if residual_norm <= tolerance:
+            return mu_value, psi_value, last_solve, last_constraint
+        if jacobian.shape == (1, 1):
+            if abs(jacobian[0, 0]) <= 1.0e-300:
+                raise RuntimeError(f"Lconstraint=1 Newton jacobian is singular for lvol={lvol}")
+            step = np.asarray([residual[0] / jacobian[0, 0]])
+        else:
+            step = np.linalg.solve(jacobian, residual)
+        if volume_map.vacuum_region:
+            psi_np = np.asarray(psi_value, dtype=np.float64).copy()
+            psi_np[: step.size] -= step
+            psi_value = jnp.asarray(psi_np, dtype=jnp.float64)
+        else:
+            mu_value = jnp.asarray(float(mu_value) - float(step[0]), dtype=jnp.float64)
+            if step.size > 1:
+                psi_np = np.asarray(psi_value, dtype=np.float64).copy()
+                psi_np[1] -= step[1]
+                psi_value = jnp.asarray(psi_np, dtype=jnp.float64)
+    assert last_solve is not None and last_constraint is not None
+    raise RuntimeError(
+        f"rotational-transform Newton did not converge for lvol={lvol}: "
+        f"residual={float(last_constraint.residual_norm):.3e}, tolerance={tolerance:.3e}"
+    )
+
+
 def solve_spectre_volume_from_input(
     summary: SpectreInputSummary,
     *,
@@ -421,10 +528,26 @@ def solve_spectre_volume_from_input(
                 nz=nz,
                 verbose=verbose,
             )
+        elif lconstraint == 1:
+            mu_value, psi_value, solve, constraint = _solve_transform_constraint(
+                summary,
+                lvol=lvol,
+                volume_map=volume_map,
+                matrices=matrices,
+                mu=mu_value,
+                psi=psi_value,
+                is_vacuum=volume_map.vacuum_region,
+                include_d_mg_in_rhs=include_d_mg_in_rhs,
+                max_constraint_iterations=max_constraint_iterations,
+                nt=nt,
+                nz=nz,
+                verbose=verbose,
+            )
         else:
             raise NotImplementedError(
                 "JAX-native local constraint solve currently supports zero-unknown branches, "
-                "plasma Lconstraint=2 helicity, plasma Lconstraint=-2 current, and vacuum Lconstraint=0 current. "
+                "plasma Lconstraint=2 helicity, plasma Lconstraint=-2 current, vacuum Lconstraint=0 current, "
+                "and Lconstraint=1 rotational-transform branches. "
                 f"Got lconstraint={lconstraint}, vacuum={volume_map.vacuum_region}, "
                 f"coordinate_singularity={volume_map.coordinate_singularity}."
             )

@@ -126,15 +126,16 @@ Current supported use:
 - solve all packed SPECTRE volumes from TOML/interface geometry and return one full vector-potential block with `solve_spectre_volumes_from_input`
 - return SPECTRE branch derivative solutions, derivative residuals, magnetic energy, and magnetic helicity from the backend solve
 - compute SPECTRE-style plasma/linking current diagnostics from solved `Ate/Aze/Ato/Azo` coefficients
+- compute SPECTRE-style Fourier rotational-transform diagnostics from solved `Ate/Aze/Ato/Azo` coefficients for validated stellarator-symmetric `Lsparse=0/3` branches
 - solve local zero-unknown branches and the JAX-native `Lconstraint=2` plasma helicity branch from TOML data
-- evaluate current-constraint Newton updates for the `Lconstraint=-2` plasma and `Lconstraint=0` vacuum branches once those branches are present in input data
+- evaluate local Newton updates for the `Lconstraint=-2` plasma current, `Lconstraint=0` vacuum current, and `Lconstraint=1` rotational-transform branches when those branches are present in input data
 - load packaged public SPECTRE compare cases for reproducible CI validation
 - reconstruct SPECTRE's internal Fourier mode order and packed radial block layout
 - pack and unpack SPECTRE-compatible per-volume solution vectors to/from `Ate`, `Aze`, `Ato`, and `Azo`
 - load released SPECTRE per-volume Beltrami linear systems and solve them with JAX
 - call a narrow JIT-backed backend adapter for already assembled SPECTRE Beltrami matrices
 - solve SPECTRE local Beltrami branches including derivative right-hand sides
-- evaluate the local `Lconstraint` residual/Jacobian table once transform/current diagnostics are supplied
+- evaluate the local `Lconstraint` residual/Jacobian table from JAX current and rotational-transform diagnostics for validated branches
 - inject a full `beltrami_jax` coefficient block into an experimental SPECTRE fork through `SPECTRE.solve_beltrami_jax(...)` and `spectre.set_vec_pot_flat(...)`
 - use the comparison tooling as the target contract for the future JAX-native backend
 
@@ -281,10 +282,12 @@ for lvol in range(1, case.input_summary.packed_volume_count + 1):
 result = solve_spectre_volumes_from_input(case.input_summary, mu=mu, psi=psi)
 ```
 
-The explicit `mu`/`psi` injection is a validation bridge, not the desired final
-SPECTRE contract. The remaining backend work is to compute the transform/current
-diagnostics and nonlinear updates directly in JAX so this call can reproduce the
-post-constraint state from TOML alone.
+The explicit `mu`/`psi` injection remains useful for strict linear parity tests
+and for branches whose nonlinear updates are not yet ported. It is no longer
+required for the packaged local `Lconstraint=1` transform branch or the local
+helicity/current branches covered by `solve_local_constraints=True`. The
+remaining backend work is the global/semi-global update path and broader
+diagnostic branch coverage.
 
 ## SPECTRE pack/unpack workflow
 
@@ -441,10 +444,12 @@ print(result.constraint.residual_norm)
 ```
 
 The local-constraint path currently covers zero-unknown branches,
-`Lconstraint=2` plasma helicity, `Lconstraint=-2` plasma current, and
-`Lconstraint=0` vacuum current. Full SPECTRE parity still needs the
-rotational-transform diagnostic used by `Lconstraint=1` and the global/semi-global
-force-coupled updates used by `Lconstraint=3`.
+`Lconstraint=2` plasma helicity, `Lconstraint=-2` plasma current,
+`Lconstraint=0` vacuum current, and local `Lconstraint=1` rotational transform
+for the validated stellarator-symmetric Fourier branch. Full SPECTRE parity
+still needs the global/semi-global force-coupled updates used by
+`Lconstraint=3` and broader non-stellarator-symmetric transform/current
+coverage.
 
 ## SPECTRE linear-system validation workflow
 
@@ -552,7 +557,7 @@ The current SPECTRE current diagnostic is available directly from solved
 coefficients:
 
 ```python
-from beltrami_jax import compute_spectre_plasma_current
+from beltrami_jax import compute_spectre_plasma_current, compute_spectre_rotational_transform
 
 currents = compute_spectre_plasma_current(
     summary,
@@ -562,6 +567,15 @@ currents = compute_spectre_plasma_current(
 )
 print(currents.currents)
 print(currents.derivative_currents)
+
+transform = compute_spectre_rotational_transform(
+    summary,
+    lvol=2,
+    vector_potential=result.vector_potential,
+    derivative_vector_potentials=result.derivative_vector_potentials,
+)
+print(transform.iota)
+print(transform.derivative_iota)
 ```
 
 ## Minimal SPECTRE backend adapter
@@ -646,7 +660,7 @@ Runtime seam validation from the local SPECTRE rebuild:
 - `G3V3L3Fi` coefficient injection has relative copy error `0.0` after `SPECTRE.solve_beltrami_jax(update_fortran=True)`.
 - `G3V3L2Fi_stability` reaches `1.25e-12` relative force agreement through `force_real(..., beltrami_backend="jax")`.
 - `G3V3L3Fi` remains at `1.67e-3` relative force error because the `Lconstraint=3` global/semi-global flux update is still open.
-- `G2V32L1Fi` remains at `2.41e-2` relative force error because the `Lconstraint=1` rotational-transform diagnostic is still open.
+- `G2V32L1Fi` is expected to improve once the SPECTRE fork calls the new JAX local transform closure instead of the older coefficient-injection seam measured before this diagnostic existed.
 
 ![SPECTRE backend seam runtime validation](_static/spectre_backend_seam_runtime.png)
 
@@ -659,6 +673,6 @@ Performance notes:
 
 ## Current boundary
 
-The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, SPECTRE matrix assembly, TOML-driven per-volume coefficient solves, SPECTRE current diagnostics, and the first local constraint updates. It is still not a complete SPECTRE backend because rotational-transform diagnostics and the global/semi-global force-coupled constraint updates are still open.
+The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, SPECTRE matrix assembly, TOML-driven per-volume coefficient solves, SPECTRE current diagnostics, the validated local rotational-transform diagnostic, and the first local constraint updates. It is still not a complete SPECTRE backend because the global/semi-global force-coupled constraint updates and broader branch coverage are still open.
 
 See the root-level `SPECTRE_MIGRATION_PLAN.md` for the current SPECTRE replacement plan.

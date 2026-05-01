@@ -2016,7 +2016,7 @@ Design decisions:
 
 - The first transform port is explicitly scoped to the SPECTRE Fourier `Lsparse=0/3`, stellarator-symmetric branch used by the public `G2V32L1Fi` validation case.
 - The implementation uses JAX arrays for the transform matrix and solves so the diagnostic remains compatible with autodiff through coefficient inputs, while keeping Python-level mode loops readable and close to the Fortran branch table.
-- The SPECTRE-side force-seam numbers for `G2V32L1Fi` need to be regenerated after wiring the local SPECTRE fork to call this new `solve_local_constraints=True` path; the previous `2.41e-2` force error predates this diagnostic.
+- The SPECTRE-side force-seam numbers for `G2V32L1Fi` were regenerated later with `solve_local_constraints=True`; see Addendum 28.
 
 Current next lane:
 
@@ -2108,9 +2108,77 @@ Design decisions:
 
 What remains:
 
-- Re-run the local SPECTRE fork seam on `G3V3L3Fi` with `solve_local_constraints=True` and regenerate the backend-seam validation panel if the force agreement reaches roundoff.
+- The local SPECTRE fork seam was rerun on `G3V3L3Fi` with `solve_local_constraints=True`; see Addendum 28.
 - Validate the free-boundary `G3V8L3Free` global `Lconstraint=3` branch without relying on SPECTRE-injected updated normal-field source arrays.
 - Add JAX-native free-boundary normal-field update support or an explicit SPECTRE adapter seam for those live Picard-updated arrays.
 - Broaden non-stellarator-symmetric transform/current diagnostic coverage.
 - Add higher-resolution and more strongly shaped public SPECTRE fixtures before claiming full backend replacement.
 - Add production sparse or matrix-free solves after branch parity is stable.
+
+## 28. 2026-04-30 Addendum: SPECTRE Force-Seam Rerun After Local and Global Closures
+
+Goal of this lane:
+
+- Rerun the local SPECTRE fork seam after the `Lconstraint=1` transform closure and the fixed-boundary `Lconstraint=3` global-current closure.
+- Replace the superseded backend-seam plot that still showed expected non-roundoff errors for those branches.
+- Keep SPECTRE-side changes small: use the existing experimental seam without adding new SPECTRE code in this lane.
+
+SPECTRE checkout state:
+
+- Path: `/Users/rogerio/local/spectre`.
+- Branch: `main`.
+- Public base commit: `08e358a`.
+- Working tree already contains the experimental `beltrami_jax` seam files from previous work; this lane did not modify them.
+- Python executable: `/Users/rogerio/base_env/bin/python`.
+- Imported `beltrami_jax` from `/Users/rogerio/local/beltrami_jax/src/beltrami_jax/__init__.py` at commit `a051ef7`.
+
+Commands run:
+
+- `force_real(xin, fortran_obj, beltrami_backend="fortran")`.
+- `force_real(xin, jax_obj, beltrami_backend="jax", solve_local_constraints=True)`.
+- Regenerated assets with:
+  - `python tools/generate_spectre_backend_seam_validation_assets.py --spectre-root /Users/rogerio/local/spectre`.
+
+Results:
+
+- `G3V3L2Fi_stability`, local helicity `Lconstraint=2`:
+  - relative force error: `1.719e-14`;
+  - max absolute force error: `1.867e-15`;
+  - injection relative error: `0.0`;
+  - max local constraint residual: `6.808e-17`;
+  - max linear relative residual: `6.002e-13`.
+- `G3V3L3Fi`, fixed-boundary global-current `Lconstraint=3`:
+  - relative force error: `1.947e-14`;
+  - max absolute force error: `2.123e-15`;
+  - injection relative error: `0.0`;
+  - global residual before Newton: `2.304e-04`;
+  - global residual after Newton: `7.641e-17`;
+  - max linear relative residual: `5.306e-13`.
+- `G2V32L1Fi`, local rotational-transform `Lconstraint=1`:
+  - relative force error: `1.981e-13`;
+  - max absolute force error: `5.906e-14`;
+  - injection relative error: `0.0`;
+  - max local transform residual: `8.882e-16`;
+  - max linear relative residual: `2.654e-13`.
+
+Files added or regenerated:
+
+- `tools/generate_spectre_backend_seam_validation_assets.py`
+  - Reproducible SPECTRE-seam runner and plot generator.
+- `docs/_static/spectre_backend_seam_runtime.png`
+  - Updated panel showing roundoff-level force agreement for all covered seam branches.
+- `docs/_static/spectre_backend_seam_runtime_summary.json`
+  - Updated machine-readable seam results.
+
+What worked:
+
+- The previous `G3V3L3Fi` force-seam error of `1.67e-3` closed to `1.95e-14` after the fixed-boundary global-current closure.
+- The previous `G2V32L1Fi` force-seam error of `2.41e-2` closed to `1.98e-13` after the local transform closure.
+- The local helicity branch also now measures at `1.72e-14`, better than the older `1.25e-12` static number.
+- SPECTRE coefficient injection remains exact at the copied-array level: injection relative error `0.0`.
+
+What remains:
+
+- The SPECTRE seam is roundoff-valid for the currently covered local helicity, local transform, and fixed-boundary global-current branches.
+- The next branch with real scientific value is `G3V8L3Free`: free-boundary `Lconstraint=3` with live normal-field update state.
+- Do not claim complete SPECTRE Beltrami removal until the free-boundary global branch and broader non-stellarator-symmetric/high-resolution cases are validated.

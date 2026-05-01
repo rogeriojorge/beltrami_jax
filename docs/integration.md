@@ -665,8 +665,9 @@ made rank-aware.
 Runtime seam validation from the local SPECTRE rebuild:
 
 - `G3V3L3Fi` coefficient injection has relative copy error `0.0` after `SPECTRE.solve_beltrami_jax(update_fortran=True)`.
-- `G3V3L2Fi_stability` reaches `1.25e-12` relative force agreement through `force_real(..., beltrami_backend="jax")`.
-- The `G3V3L3Fi` and `G2V32L1Fi` force-seam measurements in the static panel predate the new `solve_local_constraints=True` closures and must be regenerated from the SPECTRE fork.
+- `G3V3L2Fi_stability` reaches `1.72e-14` relative force agreement through `force_real(..., beltrami_backend="jax", solve_local_constraints=True)`.
+- `G3V3L3Fi` reaches `1.95e-14` relative force agreement through the same seam after the fixed-boundary `Lconstraint=3` global-current closure.
+- `G2V32L1Fi` reaches `1.98e-13` relative force agreement after the local rotational-transform closure.
 
 ![SPECTRE backend seam runtime validation](_static/spectre_backend_seam_runtime.png)
 

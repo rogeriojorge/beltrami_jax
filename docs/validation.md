@@ -260,12 +260,10 @@ Committed validation summary:
 - local `Lconstraint=2` helicity residual at SPECTRE reference state: below `1e-12`
 - local `Lconstraint=1` rotational-transform closure from TOML initial state: worst interface transform residual `6.99e-15`
 - local SPECTRE runtime injection seam: coefficient injection relative copy error `0.0`
-- opt-in `force_real(..., beltrami_backend="jax")` path: relative force error `1.25e-12` on `G3V3L2Fi_stability`
-
-The runtime SPECTRE seam panel predates the fixed-boundary `Lconstraint=3`
-global-current closure and the `G2V32L1Fi` transform closure. It should be
-regenerated after the SPECTRE fork calls `solve_local_constraints=True` for
-those branches.
+- opt-in `force_real(..., beltrami_backend="jax", solve_local_constraints=True)` SPECTRE seam:
+  - `G3V3L2Fi_stability`: relative force error `1.72e-14`
+  - `G3V3L3Fi`: relative force error `1.95e-14`
+  - `G2V32L1Fi`: relative force error `1.98e-13`
 
 ![SPECTRE backend seam runtime validation](_static/spectre_backend_seam_runtime.png)
 

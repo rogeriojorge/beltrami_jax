@@ -1,33 +1,66 @@
 {
   "generated": "2026-04-30",
-  "spectre_rebuild": "python -m pip install -e . succeeded in /Users/rogerio/local/spectre",
-  "injection": {
-    "case": "G3V3L3Fi",
-    "max_relative_residual": 8.240902103055836e-13,
-    "injection_relative_error": 0.0,
-    "shape": [
-      19,
-      23
-    ]
-  },
+  "spectre_root": "/Users/rogerio/local/spectre",
+  "beltrami_backend": "force_real(..., beltrami_backend='jax', solve_local_constraints=True)",
   "force_backend_switch": [
     {
       "case": "G3V3L2Fi_stability",
       "branch": "local helicity, Lconstraint=2",
-      "relative_force_error": 1.2510234941523128e-12,
-      "status": "validated branch"
+      "input": "tests/compare/G3V3L2Fi_stability/input.toml",
+      "force_shape": [
+        2,
+        512
+      ],
+      "force_norm_fortran": 0.013779352765279964,
+      "force_norm_jax": 0.013779352765283026,
+      "relative_force_error": 1.7193799220686862e-14,
+      "max_abs_force_error": 1.8665624601510444e-15,
+      "injection_relative_error": 0.0,
+      "max_linear_relative_residual": 6.00225489934108e-13,
+      "max_local_constraint_residual": 6.808112016851164e-17,
+      "global_constraint_initial": null,
+      "global_constraint_final": null,
+      "superseded_relative_force_error": 1.2510234941523128e-12
     },
     {
       "case": "G3V3L3Fi",
-      "branch": "semi-global flux, Lconstraint=3",
-      "relative_force_error": 0.0016675304372497828,
-      "status": "superseded measurement: fixed-boundary global-current closure is now ported; SPECTRE seam rerun pending"
+      "branch": "fixed-boundary global current, Lconstraint=3",
+      "input": "tests/compare/G3V3L3Fi/input.toml",
+      "force_shape": [
+        2,
+        512
+      ],
+      "force_norm_fortran": 0.013762269073099631,
+      "force_norm_jax": 0.01376226907310436,
+      "relative_force_error": 1.9467071484882596e-14,
+      "max_abs_force_error": 2.123301534595612e-15,
+      "injection_relative_error": 0.0,
+      "max_linear_relative_residual": 5.306232168569285e-13,
+      "max_local_constraint_residual": null,
+      "global_constraint_initial": 0.00023040432506747166,
+      "global_constraint_final": 7.640575997412691e-17,
+      "superseded_relative_force_error": 0.0016675304372497828
     },
     {
       "case": "G2V32L1Fi",
       "branch": "rotational transform, Lconstraint=1",
-      "relative_force_error": 0.024055140334128033,
-      "status": "superseded measurement: rotational-transform closure is now ported for the packaged branch; SPECTRE seam rerun pending"
+      "input": "tests/compare/G2V32L1Fi/input.toml",
+      "force_shape": [
+        3,
+        128
+      ],
+      "force_norm_fortran": 3.5050996482475147,
+      "force_norm_jax": 3.5050996482479024,
+      "relative_force_error": 1.981220071905107e-13,
+      "max_abs_force_error": 5.906386491005833e-14,
+      "injection_relative_error": 0.0,
+      "max_linear_relative_residual": 2.6540225337275503e-13,
+      "max_local_constraint_residual": 8.881784197001252e-16,
+      "global_constraint_initial": null,
+      "global_constraint_final": null,
+      "superseded_relative_force_error": 0.024055140334128033
     }
-  ]
+  ],
+  "max_relative_force_error": 1.981220071905107e-13,
+  "max_injection_relative_error": 0.0
 }

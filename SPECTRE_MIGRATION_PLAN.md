@@ -28,7 +28,8 @@ What currently works:
 
 What is not yet done:
 
-- It does not yet validate the free-boundary global constraint loop without SPECTRE normal-field metadata injection.
+- It now validates the free-boundary global constraint loop when supplied SPECTRE's live/post-Picard normal-field state.
+- It does not yet port SPECTRE's virtual-casing/free-boundary normal-field Picard update into JAX.
 - It does not yet cover non-stellarator-symmetric transform/current diagnostic branches.
 - It does not yet cover enough non-stellarator-symmetric and high-resolution fixtures to claim full SPECTRE backend replacement.
 - The docs have been tightened, but must continue to avoid claiming SPECTRE backend replacement before JAX-native coefficient parity exists.
@@ -36,7 +37,7 @@ What is not yet done:
 Recommended immediate direction:
 
 - Treat `beltrami_jax` as a strict SPECTRE Beltrami backend project, not as a loosely similar Beltrami solver.
-- Next validate free-boundary `Lconstraint=3` without injected SPECTRE normal-field state and broaden transform/current diagnostics beyond the first validated stellarator-symmetric local branch.
+- Next port the virtual-casing/free-boundary normal-field update and broaden transform/current diagnostics beyond the first validated stellarator-symmetric local branch.
 - Only after post-constraint coefficient parity is established for the remaining branches should we attempt a default SPECTRE fork replacement branch.
 
 ## 2. Direct Answers to the Collaborator's Email
@@ -69,7 +70,7 @@ Current `beltrami_jax` answer:
 
 - Yes for the SPECTRE IO/validation contract, for validated per-volume JAX-assembled solves when supplied the post-constraint SPECTRE branch state, for the packaged local `Lconstraint=1` branch from TOML initial state, and for the packaged fixed-boundary `Lconstraint=3` branch from TOML initial state.
 - `beltrami_jax` now loads SPECTRE `reference.h5` vector-potential datasets and compares them to fresh SPECTRE exports from `spectre.get_vec_pot_flat`.
-- The JAX-native SPECTRE path can now assemble and unpack per-volume coefficients; the remaining blocker is computing free-boundary global post-constraint branch states without SPECTRE normal-field injection and broadening branch coverage.
+- The JAX-native SPECTRE path can now assemble and unpack per-volume coefficients, including fixed-boundary global and free-boundary global `Lconstraint=3` states for the public fixtures. The remaining blocker is computing the virtual-casing/free-boundary normal-field update in JAX and broadening branch coverage.
 - Existing dense validation compares to linear systems dumped from an instrumented local SPEC build and now also to released SPECTRE per-volume linear-system exports: operator, RHS, and solved degree-of-freedom vector.
 
 SPECTRE assessment:
@@ -1243,7 +1244,7 @@ Updated interpretation:
 - That force-seam figure was regenerated later from the local SPECTRE fork using `solve_local_constraints=True`; see Section 21.
 - `Lconstraint=1` is no longer the main missing local branch for the validated stellarator-symmetric Fourier path.
 - The primary SPEC-removal blockers are now:
-  - free-boundary global `Lconstraint=3` without injected normal-field state;
+  - virtual-casing/free-boundary normal-field updates without live SPECTRE normal-field state;
   - non-stellarator-symmetric transform/current branches;
   - broader high-resolution 3D fixture coverage;
   - production sparse/matrix-free scaling.
@@ -1338,5 +1339,5 @@ Generated assets:
 Updated interpretation:
 
 - The SPECTRE Python seam is now roundoff-valid for the three currently covered branches: local helicity, local rotational transform, and fixed-boundary global current.
-- This does not yet remove SPEC/SPECTRE Beltrami generally because free-boundary global-current state and broader branch coverage remain open.
-- The next high-value implementation lane is `G3V8L3Free` free-boundary `Lconstraint=3`, specifically the live normal-field update state used by SPECTRE's Picard free-boundary iteration.
+- This does not yet remove SPEC/SPECTRE Beltrami generally because the virtual-casing/free-boundary normal-field update and broader branch coverage remain open.
+- The next high-value implementation lane is porting the normal-field update used by SPECTRE's Picard free-boundary iteration, then validating it against `G3V8L3Free` without receiving live normal-field arrays from SPECTRE.

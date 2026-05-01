@@ -43,9 +43,9 @@ The repository currently covers the supported Beltrami workflow components:
 - SPECTRE HDF5 vector-potential coefficient loading and comparison
 - SPECTRE solution-vector pack/unpack maps and packaged linear-system parity fixtures
 - SPECTRE TOML/interface-geometry matrix assembly for the packaged validated branches
-- SPECTRE-shaped `Ate/Aze/Ato/Azo` solves, derivative vector-potential blocks, current diagnostics, selected local constraint updates, and fixed-boundary `Lconstraint=3` global-current closure
+- SPECTRE-shaped `Ate/Aze/Ato/Azo` solves, derivative vector-potential blocks, current diagnostics, selected local constraint updates, and fixed-boundary/free-boundary `Lconstraint=3` global-current closure
 
-It does not yet include all of SPEC or a full JAX-native SPECTRE Beltrami backend because free-boundary global validation, non-stellarator-symmetric diagnostics, broader fixtures, and production sparse scaling remain open.
+It does not yet include all of SPEC or a full JAX-native SPECTRE Beltrami backend because the virtual-casing/free-boundary normal-field update, non-stellarator-symmetric diagnostics, broader fixtures, and production sparse scaling remain open.
 
 ## Quick links
 

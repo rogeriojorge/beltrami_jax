@@ -16,7 +16,7 @@ The repository currently covers four complementary paths:
 
 The assembled-system and SPECTRE fixture paths are the current scientifically relevant validation paths. The SPECTRE geometry/integral evaluator is the new matrix-assembly foundation. The internal geometry prototype is useful for development and examples, but it is separate from SPECTRE's interface-Fourier geometry path.
 
-This is not yet a complete SPECTRE Beltrami backend, but the matrix-assembly and constraint-replacement lanes are now substantially covered for the public validation cases. SPECTRE TOML input summaries, HDF5 vector-potential coefficient validation, packed radial block layout, SPECTRE-compatible solution-vector pack/unpack maps, local `Lconstraint` branch formulas, JAX-native interface-geometry evaluation, SPECTRE `matrixBG` boundary assembly for `dMB/dMG`, JAX-native SPECTRE `dMA/dMD` volume-matrix assembly, SPECTRE `rzaxis`-style toroidal-axis initialization, SPECTRE current diagnostics, SPECTRE rotational-transform diagnostics for the validated stellarator-symmetric Fourier branch, local `Lconstraint=1/2` updates, fixed-boundary global `Lconstraint=3` updates, TOML-driven per-volume and multi-volume solves that unpack to full `Ate/Aze/Ato/Azo` arrays, and an experimental SPECTRE runtime injection seam are implemented. Remaining backend work is concentrated on free-boundary global validation without SPECTRE normal-field injection, non-stellarator-symmetric transform diagnostics, broader high-resolution fixtures, and production sparse/matrix-free scaling documented in [SPECTRE_MIGRATION_PLAN.md](SPECTRE_MIGRATION_PLAN.md).
+This is not yet a complete SPECTRE Beltrami backend, but the matrix-assembly and constraint-replacement lanes are now substantially covered for the public validation cases. SPECTRE TOML input summaries, HDF5 vector-potential coefficient validation, packed radial block layout, SPECTRE-compatible solution-vector pack/unpack maps, local `Lconstraint` branch formulas, JAX-native interface-geometry evaluation, SPECTRE `matrixBG` boundary assembly for `dMB/dMG`, JAX-native SPECTRE `dMA/dMD` volume-matrix assembly, SPECTRE `rzaxis`-style toroidal-axis initialization, SPECTRE current diagnostics, SPECTRE rotational-transform diagnostics for the validated stellarator-symmetric Fourier branch, local `Lconstraint=1/2` updates, fixed-boundary and free-boundary global `Lconstraint=3` updates, TOML-driven per-volume and multi-volume solves that unpack to full `Ate/Aze/Ato/Azo` arrays, and an experimental SPECTRE runtime injection seam are implemented. Remaining backend work is concentrated on porting SPECTRE's virtual-casing/free-boundary normal-field Picard update itself, non-stellarator-symmetric transform diagnostics, broader high-resolution fixtures, and production sparse/matrix-free scaling documented in [SPECTRE_MIGRATION_PLAN.md](SPECTRE_MIGRATION_PLAN.md).
 
 The repository ships under the MIT License; see [LICENSE](LICENSE).
 
@@ -88,7 +88,7 @@ Today the repository includes:
 - SPECTRE-compatible `Ate/Aze/Ato/Azo` degree-of-freedom maps matching `gi00ab`, `lregion`, `preset_mod.F90`, and `packab`
 - differentiable JAX scatter/gather pack/unpack helpers between SPECTRE coefficient arrays and per-volume solution vectors
 - SPECTRE current and Fourier rotational-transform diagnostics from solved coefficients, feeding local `Lconstraint` residual/Jacobian formulas matching `construct_beltrami_field` / `solve_beltrami_system`
-- SPECTRE `lbpol` mean covariant `B_theta` diagnostics and fixed-boundary `Lconstraint=3` global-current Newton updates matching `forces_mod.F90::dfp100`
+- SPECTRE `lbpol` mean covariant `B_theta` diagnostics and fixed-boundary/free-boundary `Lconstraint=3` global-current Newton updates matching `forces_mod.F90::dfp100`
 - packaged public SPECTRE compare cases for reproducible CI validation without a local SPECTRE checkout
 - packaged public SPECTRE per-volume Beltrami linear systems exported from `solve_beltrami_system`
 - a small JIT-backed SPECTRE backend adapter that consumes SPECTRE-assembled `dMA/dMD/dMB/dMG` arrays and returns solved vectors plus residual metrics
@@ -107,7 +107,7 @@ The SPECTRE packing layer now reconstructs SPECTRE's internal Fourier ordering a
 
 The SPECTRE linear-system validation layer packages the dense `dMA`, `dMD`, `dMB`, `dMG`, final matrix, RHS, and solved SPECTRE degree-of-freedom vectors exported from released SPECTRE cases. These fixtures are developer validation assets: they prove the JAX linear solve matches SPECTRE once SPECTRE has assembled the system, but they are not the final user-facing SPECTRE input contract.
 
-The SPECTRE boundary-assembly layer now ports `matrixBG`. It builds the flux-coupling matrix `dMB` and boundary-normal-field source `dMG` from `SpectreInputSummary`/`SpectreVolumeDofMap` data. For fixed-boundary shipped cases this matches SPECTRE fixtures exactly; for free-boundary runs the TOML-only path gives the initial source, while exact post-Picard parity requires passing the updated normal-field arrays from the free-boundary iteration.
+The SPECTRE boundary-assembly layer now ports `matrixBG`. It builds the flux-coupling matrix `dMB` and boundary-normal-field source `dMG` from `SpectreInputSummary`/`SpectreVolumeDofMap` data. For fixed-boundary shipped cases this matches SPECTRE fixtures exactly. For free-boundary runs the TOML-only path gives the initial source, while exact post-Picard parity uses the updated normal-field arrays from the free-boundary iteration or an equivalent exported `dMG` source vector.
 
 The SPECTRE volume-matrix layer now ports the radial basis, quadrature, metric-integral, and `dMA/dMD` matrix-contraction path. It generates missing cylindrical and toroidal `Linitialize=1` interface rows directly from TOML flux and boundary data, includes SPECTRE's centroid-style `rzaxis` coordinate-axis initialization for the covered toroidal cases, and reproduces released SPECTRE `dMA/dMD` fixtures at roundoff for the packaged cylindrical, toroidal fixed-boundary, explicit-interface free-boundary, and vacuum volumes.
 
@@ -127,10 +127,11 @@ Validation today has several levels:
 - SPECTRE local branch-solve tests now cover every packaged released linear fixture, the `Lconstraint` unknown-count/residual/Jacobian branch table, and direct current/rotational-transform diagnostics for validated branches.
 - SPECTRE `Lconstraint=1` local rotational-transform closure now solves the `G2V32L1Fi` branch from TOML initial state, reaches worst transform residual `6.99e-15`, and matches SPECTRE post-constraint coefficients with worst per-volume relative error `1.22e-14`.
 - SPECTRE fixed-boundary `Lconstraint=3` global-current closure now solves `G3V3L3Fi` from TOML initial state, reduces the global constraint residual from `2.30e-4` to `6.62e-17`, and matches post-constraint coefficients with global relative error `1.68e-14`.
+- SPECTRE free-boundary `Lconstraint=3` global-current closure now solves `G3V8L3Free` with SPECTRE-updated normal-field state, reduces the global residual from `1.55e-2` to `8.88e-16`, and matches post-constraint coefficients with global relative error `3.38e-15`.
 - A rebuilt local SPECTRE fork can inject `beltrami_jax` coefficients into SPECTRE memory with relative copy error `0.0`; the opt-in `force_real(..., beltrami_backend="jax", solve_local_constraints=True)` path now reaches relative force errors `1.72e-14` for `G3V3L2Fi_stability`, `1.95e-14` for `G3V3L3Fi`, and `1.98e-13` for `G2V32L1Fi`.
 - SPECTRE geometry tests now cover allrzrz/free-boundary wall parsing, coordinate-singularity interpolation, finite Jacobian/metric evaluation, metric symmetry, and autodiff through radial interpolation.
 
-The remaining SPECTRE replacement milestone is stronger: validate the free-boundary `Lconstraint=3` path without SPECTRE normal-field injection, broaden transform/current diagnostics beyond the validated stellarator-symmetric Fourier branch, and produce the same `Ate`, `Aze`, `Ato`, and `Azo` coefficients directly from SPECTRE TOML/interface geometry for every branch.
+The remaining SPECTRE replacement milestone is stronger: move the virtual-casing/free-boundary normal-field Picard update into JAX instead of receiving live normal-field state from SPECTRE, broaden transform/current diagnostics beyond the validated stellarator-symmetric Fourier branch, and produce the same `Ate`, `Aze`, `Ato`, and `Azo` coefficients directly from SPECTRE TOML/interface geometry for every branch.
 
 ![SPECTRE backend seam runtime validation](docs/_static/spectre_backend_seam_runtime.png)
 
@@ -263,6 +264,10 @@ SPECTRE fixed-boundary `Lconstraint=3` global-current closure from TOML initial 
 
 ![SPECTRE global-current closure](docs/_static/spectre_lconstraint3_global.png)
 
+SPECTRE free-boundary `Lconstraint=3` global-current closure with SPECTRE-updated normal-field state:
+
+![SPECTRE free-boundary global-current closure](docs/_static/spectre_lconstraint3_free_boundary.png)
+
 Standalone workflow outputs generated from the current example scripts:
 
 ![SPEC fixture workflow](docs/_static/spec_fixture_spectrum.png)
@@ -287,6 +292,7 @@ Current quantitative highlights from the committed validation and benchmark runs
 - SPECTRE TOML full-volume assembly and solve reconstructs all `G3V3L3Fi` vector-potential coefficients with global relative error `1.69e-14`
 - SPECTRE local `Lconstraint=1` rotational-transform closure reconstructs all `G2V32L1Fi` post-constraint branch states with worst transform residual `6.99e-15`
 - SPECTRE fixed-boundary `Lconstraint=3` global-current closure reconstructs all `G3V3L3Fi` post-constraint branch states with final global residual `6.62e-17`
+- SPECTRE free-boundary `Lconstraint=3` global-current closure reconstructs all `G3V8L3Free` post-constraint branch states with final global residual `8.88e-16`
 
 ## Repository layout
 
@@ -612,4 +618,4 @@ Read the Docs note:
 
 ## Project status
 
-This is an active build-out repository. The dense regression-tested kernel, diagnostics, benchmark tooling, validation figures, SPECTRE IO, exact coefficient pack/unpack maps, local branch/constraint logic, JAX-native interface-geometry evaluation, SPECTRE matrix assembly, rotational-transform/current diagnostics for validated branches, fixed-boundary global `Lconstraint=3`, and TOML-driven per-volume and multi-volume coefficient solve paths are in place. The next steps are free-boundary global validation, broader SPECTRE fixture coverage, production sparse/matrix-free scaling, and then a small SPECTRE fork experiment using the JAX backend as the default Beltrami path.
+This is an active build-out repository. The dense regression-tested kernel, diagnostics, benchmark tooling, validation figures, SPECTRE IO, exact coefficient pack/unpack maps, local branch/constraint logic, JAX-native interface-geometry evaluation, SPECTRE matrix assembly, rotational-transform/current diagnostics for validated branches, fixed-boundary/free-boundary global `Lconstraint=3`, and TOML-driven per-volume and multi-volume coefficient solve paths are in place. The next steps are JAX-native virtual-casing/free-boundary normal-field updates, broader SPECTRE fixture coverage, production sparse/matrix-free scaling, and then hardening the SPECTRE fork experiment using the JAX backend as the default Beltrami path.

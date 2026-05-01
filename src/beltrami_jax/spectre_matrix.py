@@ -173,6 +173,48 @@ def build_spectre_boundary_normal_field(summary: SpectreInputSummary) -> Spectre
     )
 
 
+def spectre_boundary_normal_field_from_dmg(
+    volume_map: SpectreVolumeDofMap,
+    d_mg: object,
+) -> SpectreBoundaryNormalField:
+    """Recover a boundary-normal-field source equivalent to SPECTRE ``dMG``.
+
+    SPECTRE's ``matrixBG`` uses only the sums ``iVns + iBns`` and
+    ``iVnc + iBnc`` when scattering the free-boundary source into ``dMG``.
+    Released validation fixtures and SPECTRE runtime seams can therefore
+    provide either the live ``iV/iB`` arrays or an already exported ``dMG``
+    vector.  This helper reconstructs an equivalent source state from ``dMG``
+    for one packed volume by storing the combined source in the vacuum
+    component and leaving the plasma component zero.
+
+    The reconstruction is intended for validation and adapter seams.  It does
+    not claim to separate the physical vacuum and plasma contributions after
+    SPECTRE's free-boundary Picard update has mixed them.
+    """
+
+    source = jnp.asarray(d_mg, dtype=jnp.float64)
+    expected = (volume_map.solution_size,)
+    if source.shape != expected:
+        raise ValueError(f"d_mg shape {source.shape} does not match expected {expected}")
+
+    ivns = jnp.zeros((volume_map.mode_count,), dtype=jnp.float64)
+    ibns = jnp.zeros((volume_map.mode_count,), dtype=jnp.float64)
+    ivnc = jnp.zeros((volume_map.mode_count,), dtype=jnp.float64)
+    ibnc = jnp.zeros((volume_map.mode_count,), dtype=jnp.float64)
+
+    lme_ids = jnp.asarray(volume_map.lme, dtype=jnp.int32) - 1
+    lme_mask = lme_ids >= 0
+    lme_safe = jnp.where(lme_mask, lme_ids, 0)
+    ivns = jnp.where(lme_mask, -source[lme_safe], ivns)
+
+    lmf_ids = jnp.asarray(volume_map.lmf, dtype=jnp.int32) - 1
+    lmf_mask = lmf_ids >= 0
+    lmf_safe = jnp.where(lmf_mask, lmf_ids, 0)
+    ivnc = jnp.where(lmf_mask, -source[lmf_safe], ivnc)
+
+    return SpectreBoundaryNormalField(ivns=ivns, ibns=ibns, ivnc=ivnc, ibnc=ibnc)
+
+
 def _scatter_vector(ids: object, values: Array, size: int) -> Array:
     ids_j = jnp.asarray(ids, dtype=jnp.int32) - 1
     mask = ids_j >= 0

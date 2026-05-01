@@ -292,8 +292,11 @@ and for branches whose nonlinear updates are not yet ported. It is no longer
 required for the packaged local `Lconstraint=1` transform branch, the
 fixed-boundary `Lconstraint=3` global-current branch, or the local
 helicity/current branches covered by `solve_local_constraints=True`. The
-remaining backend work is free-boundary global validation and broader
-diagnostic branch coverage.
+free-boundary `Lconstraint=3` global-current branch is also covered when the
+runtime supplies the same updated normal-field state used by SPECTRE's
+free-boundary iteration. The remaining backend work is the JAX-native
+virtual-casing/free-boundary normal-field update and broader diagnostic branch
+coverage.
 
 ## SPECTRE pack/unpack workflow
 
@@ -454,8 +457,9 @@ The local-constraint path currently covers zero-unknown branches,
 `Lconstraint=0` vacuum current, and local `Lconstraint=1` rotational transform
 for the validated stellarator-symmetric Fourier branch. The multi-volume path
 also covers the fixed-boundary `Lconstraint=3` global-current branch for the
-public `G3V3L3Fi` case. Full SPECTRE parity still needs the free-boundary
-global-current branch without injected normal-field state and broader
+public `G3V3L3Fi` case and the free-boundary `G3V8L3Free` global-current branch
+when supplied SPECTRE's updated normal-field state. Full SPECTRE parity still
+needs the virtual-casing/free-boundary normal-field update and broader
 non-stellarator-symmetric transform/current coverage.
 
 ## SPECTRE linear-system validation workflow
@@ -680,6 +684,6 @@ Performance notes:
 
 ## Current boundary
 
-The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, SPECTRE matrix assembly, TOML-driven per-volume coefficient solves, SPECTRE current diagnostics, the validated local rotational-transform diagnostic, local constraint updates, and fixed-boundary `Lconstraint=3` global-current closure. It is still not a complete SPECTRE backend because free-boundary global validation and broader branch coverage are still open.
+The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, SPECTRE matrix assembly, TOML-driven per-volume coefficient solves, SPECTRE current diagnostics, the validated local rotational-transform diagnostic, local constraint updates, and fixed-boundary/free-boundary `Lconstraint=3` global-current closure. It is still not a complete SPECTRE backend because the virtual-casing/free-boundary normal-field update and broader branch coverage are still open.
 
 See the root-level `SPECTRE_MIGRATION_PLAN.md` for the current SPECTRE replacement plan.

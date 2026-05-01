@@ -79,6 +79,7 @@ from .spectre_matrix import (
     assemble_spectre_matrix_bg,
     assemble_spectre_matrix_bg_from_input,
     build_spectre_boundary_normal_field,
+    spectre_boundary_normal_field_from_dmg,
 )
 from .spectre_integrals import (
     SpectreMetricIntegrals,
@@ -289,6 +290,7 @@ __all__ = [
     "solve_spectre_volumes_from_input",
     "spectre_branch_unknowns",
     "spectre_boundary_radial_basis",
+    "spectre_boundary_normal_field_from_dmg",
     "spectre_constraint_dof_count",
     "spectre_default_angular_grid",
     "spectre_default_quadrature_size",

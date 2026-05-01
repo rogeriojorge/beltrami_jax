@@ -65,6 +65,10 @@ The fixed-boundary SPECTRE `Lconstraint=3` global-current solve generates a TOML
 
 ![SPECTRE Lconstraint=3 global-current closure](_static/spectre_lconstraint3_global.png)
 
+The free-boundary SPECTRE `Lconstraint=3` global-current solve generates a closure panel using SPECTRE's post-Picard normal-field state:
+
+![SPECTRE free-boundary Lconstraint=3 global-current closure](_static/spectre_lconstraint3_free_boundary.png)
+
 These figures summarize:
 
 - coefficient-level agreement between SPEC and `beltrami_jax`
@@ -79,6 +83,7 @@ These figures summarize:
 - SPECTRE `matrixBG` `dMB/dMG` boundary assembly parity for fixed-boundary fixtures and exact updated-normal-field source parity for all packaged fixtures
 - full SPECTRE TOML/interface-geometry assembly, solve, unpack, and coefficient comparison for all packed `G3V3L3Fi` volumes
 - fixed-boundary SPECTRE `Lconstraint=3` global-current closure from TOML initial state for `G3V3L3Fi`
+- free-boundary SPECTRE `Lconstraint=3` global-current closure for `G3V8L3Free` using the same updated normal-field state used by SPECTRE's free-boundary iteration
 
 Release-gate example outputs generated from the current source tree:
 
@@ -186,6 +191,7 @@ The test suite verifies:
 - `solve_spectre_volume_from_input(..., solve_local_constraints=True)` is also tested on the `G2V32L1Fi` rotational-transform branch; the generated validation panel closes all four local `Lconstraint=1` volumes from TOML initial state with worst transform residual `6.99e-15`, worst post-constraint state error `3.18e-14`, and worst per-volume coefficient relative error `1.22e-14`.
 - `solve_spectre_volumes_from_input` is tested in a full TOML-to-`Ate/Aze/Ato/Azo` path that reconstructs all packed `G3V3L3Fi` coefficients with global relative error `1.69e-14` when supplied the same post-constraint branch state used by SPECTRE.
 - `solve_spectre_volumes_from_input(..., solve_local_constraints=True)` now solves the fixed-boundary `G3V3L3Fi` `Lconstraint=3` branch from TOML initial state. It recomputes SPECTRE's `mu` from `Ivolume/tflux`, evaluates interface-current residuals from JAX `B_theta`, applies the global Newton correction to coupled `dpflux`, and reconstructs SPECTRE coefficients with global relative error `1.68e-14`.
+- `solve_spectre_volumes_from_input(..., solve_local_constraints=True, normal_field=...)` now solves the free-boundary `G3V8L3Free` `Lconstraint=3` branch with SPECTRE-updated normal-field state. It solves the eight plasma volumes plus the vacuum exterior block, updates coupled `dpflux` and the vacuum `dtflux`, reduces the global residual from `1.55e-2` to `8.88e-16`, and reconstructs SPECTRE coefficients with global relative error `3.38e-15`.
 
 Current public SPECTRE compare-case results:
 
@@ -293,8 +299,9 @@ The SPECTRE branch tests cover the local pieces ported from
 - `evaluate_spectre_constraints` checks residual/Jacobian formulas for current, rotational-transform, helicity, no-iteration, and global-constraint branches using injected diagnostic arrays.
 - `compute_spectre_rotational_transform` and `solve_spectre_volume_from_input(..., solve_local_constraints=True)` close the packaged `G2V32L1Fi` local transform branch from TOML initial state.
 - `compute_spectre_btheta_mean` and `solve_spectre_volumes_from_input(..., solve_local_constraints=True)` close the packaged fixed-boundary `G3V3L3Fi` global-current branch from TOML initial state.
+- `solve_spectre_volumes_from_input(..., solve_local_constraints=True, normal_field=...)` closes the packaged free-boundary `G3V8L3Free` global-current branch when supplied the updated normal-field state from SPECTRE's free-boundary iteration.
 
-This validates the branch contract, the first JAX-native transform diagnostic branch, and the first fixed-boundary global-current branch before broader non-stellarator-symmetric and free-boundary global branches are complete.
+This validates the branch contract, the first JAX-native transform diagnostic branch, fixed-boundary global-current closure, and free-boundary global-current closure with live normal-field state before broader non-stellarator-symmetric and virtual-casing branches are complete.
 
 ## Coverage target
 
@@ -310,12 +317,12 @@ The current validation is strong for the implemented regression and internal-wor
 Remaining validation work includes:
 
 - comparisons against later SPECTRE integration points beyond exported matrix/RHS/solution fixtures
-- final-state SPECTRE HDF5 vector-potential coefficient generation without injecting post-constraint SPECTRE `mu`/flux values
+- final-state SPECTRE HDF5 vector-potential coefficient generation across more cases without injecting post-constraint SPECTRE `mu`/flux values
 - broader JAX-native rotational-transform diagnostics beyond the validated stellarator-symmetric local branch
 - dedicated SPECTRE dumps of `dItGpdxtp` values for stronger current-diagnostic parity
-- SPECTRE free-boundary `Lconstraint=3` force-coupled update parity without injected normal-field state
+- JAX-native virtual-casing/free-boundary normal-field update parity, so the free-boundary branch no longer needs live SPECTRE normal-field state
 - broader 3D fixture coverage closer to anticipated SPECTRE use cases
-- end-to-end SPECTRE fork integration once free-boundary global nonlinear updates and broader branch coverage are complete
+- end-to-end SPECTRE fork integration once virtual-casing updates and broader branch coverage are complete
 
 ## Why exact dense regression matters
 

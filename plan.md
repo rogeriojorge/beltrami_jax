@@ -2182,3 +2182,85 @@ What remains:
 - The SPECTRE seam is roundoff-valid for the currently covered local helicity, local transform, and fixed-boundary global-current branches.
 - The next branch with real scientific value is `G3V8L3Free`: free-boundary `Lconstraint=3` with live normal-field update state.
 - Do not claim complete SPECTRE Beltrami removal until the free-boundary global branch and broader non-stellarator-symmetric/high-resolution cases are validated.
+
+## 29. 2026-05-01 Addendum: Free-Boundary Lconstraint=3 Runtime-State Closure
+
+Goal of this lane:
+
+- Close the public `G3V8L3Free` free-boundary `Lconstraint=3` Beltrami solve lane at coefficient parity.
+- Keep the claim precise: this validates the JAX Beltrami assembly/solve/global-current update when supplied SPECTRE's live/post-Picard normal-field state; it does not yet port the virtual-casing normal-field update itself.
+- Add a reusable normal-field source helper, tests, validation plots, and documentation so the status is reviewer-facing and restartable.
+- Tighten the local SPECTRE seam so `use_current_state=True` can pass live `iVns/iBns/iVnc/iBnc` arrays to `beltrami_jax` instead of relying only on TOML initial normal-field tables.
+
+Files added:
+
+- `tools/generate_spectre_free_boundary_lconstraint3_validation_assets.py`
+  - Solves the public `G3V8L3Free` case from TOML/interface geometry with SPECTRE-updated normal-field state reconstructed from released fixture `dMG` sources.
+  - Writes `docs/_static/spectre_lconstraint3_free_boundary.png`.
+  - Writes `docs/_static/spectre_lconstraint3_free_boundary_summary.json`.
+- `docs/_static/spectre_lconstraint3_free_boundary.png`
+  - Four-panel validation plot showing flux updates, global residual closure, state parity, and coefficient parity.
+- `docs/_static/spectre_lconstraint3_free_boundary_summary.json`
+  - Machine-readable residual/state/coefficient validation summary.
+
+Files modified:
+
+- `src/beltrami_jax/spectre_matrix.py`
+  - Adds `spectre_boundary_normal_field_from_dmg(volume_map, d_mg)`.
+  - This reconstructs a source-equivalent `SpectreBoundaryNormalField` from an exported SPECTRE `dMG` vector by placing the combined `iV+iB` source into the vacuum component and leaving the plasma component zero.
+  - This is a validation/adapter helper; it does not physically separate vacuum and plasma normal-field contributions after Picard mixing.
+- `src/beltrami_jax/__init__.py`
+  - Exports `spectre_boundary_normal_field_from_dmg`.
+- `tests/test_spectre_matrix.py`
+  - Uses the public helper for updated-normal-field fixture parity.
+- `tests/test_spectre_volume_matrix.py`
+  - Adds `test_toml_free_boundary_lconstraint3_global_solve_matches_reference_with_updated_normal_field_state`.
+  - The test solves all nine packed `G3V8L3Free` volumes, including the vacuum exterior block, applies the global current correction, and compares the full `Ate/Aze/Ato/Azo` block to SPECTRE.
+- `README.md`, `docs/index.md`, `docs/overview.md`, `docs/theory.md`, `docs/integration.md`, `docs/validation.md`, `docs/limitations.md`, `SPECTRE_MIGRATION_PLAN.md`
+  - Update status from "free-boundary global validation is open" to "free-boundary global closure is validated with live/post-Picard normal-field state".
+  - Clarify that the remaining scientific/backend lane is the JAX-native virtual-casing/free-boundary normal-field Picard update.
+- `/Users/rogerio/local/spectre/spectre/beltrami_jax_backend.py`
+  - Adds a tiny runtime bridge that checks `test.input_list_mod.lfreebound` and extracts `test.allglobal_mod.ivns`, `ibns`, `ivnc`, and `ibnc` for free-boundary states.
+  - Passes this as `normal_field` to `beltrami_jax` for `use_current_state=True` unless the caller already supplied a `normal_field`.
+- `/Users/rogerio/local/spectre/spectre/core/core.py`
+  - Adds `include_normal_field_state=True` to `SPECTRE.solve_beltrami_jax(...)` and forwards it to the adapter.
+
+What worked:
+
+- The free-boundary `G3V8L3Free` high-level solve now reaches:
+  - initial global residual infinity norm: `1.549e-02`;
+  - final global residual infinity norm: `8.882e-16`;
+  - full coefficient global relative error: `3.379e-15`;
+  - worst post-correction `mu`/`psi` state error: `2.767e-16`;
+  - maximum linear relative residual across the nine packed volumes: `2.525e-12`.
+- The corrected unknown ordering for the public free-boundary branch is:
+  - `dpflux_lvol2` through `dpflux_lvol9`;
+  - `dtflux_lvol9`.
+- The generator prints progress for every volume and produces a reviewer-facing plot suitable for docs and a future SPECTRE PR.
+- Targeted regression command:
+  - `pytest tests/test_spectre_matrix.py::test_matrix_bg_accepts_updated_normal_field_for_exact_fixture_parity tests/test_spectre_volume_matrix.py::test_toml_free_boundary_lconstraint3_global_solve_matches_reference_with_updated_normal_field_state -q`
+  - Result: both selected tests passed, then the partial run failed only because repository-wide coverage is enforced and a two-test subset cannot meet `--cov-fail-under=90`.
+  - Re-run with `-o addopts=''`: `2 passed in 43.14s`.
+- Release-gate verification after the lane:
+  - `pytest`: `124 passed in 605.16s`, total coverage `90.88%`.
+  - `sphinx-build -W --keep-going -b html docs docs/_build/html`: passed.
+  - `python -m build`: passed, producing `beltrami_jax-0.1.0.tar.gz` and `beltrami_jax-0.1.0-py3-none-any.whl`.
+- Local SPECTRE adapter smoke after fixing the bridge detection:
+  - input: `/Users/rogerio/local/spectre/tests/compare/G3V8L3Free/input.toml`;
+  - call: `test.solve_beltrami_jax(use_current_state=True, solve_local_constraints=True, update_fortran=False)`;
+  - result: 9 volumes, max linear relative residual `2.525e-12`, global residual `2.104e-04 -> 8.882e-16`, live normal-field arrays shape `(5,)`.
+
+Design decisions:
+
+- The helper reconstructing normal field from `dMG` is explicitly source-equivalent, not physically decomposed, because `matrixBG` depends on `iVns+iBns` and `iVnc+iBnc`.
+- The SPECTRE runtime seam passes live `iV/iB` arrays when available, which is the minimal SPECTRE-side change needed to remove the Fortran Beltrami assembly/solve from the free-boundary branch while leaving SPECTRE's existing virtual-casing update in charge.
+- The docs now distinguish three states:
+  - TOML-only initial free-boundary normal-field source;
+  - SPECTRE-updated normal-field source, which validates the Beltrami backend at machine precision;
+  - future JAX-native virtual-casing/free-boundary normal-field Picard update, which is still required before claiming fully standalone free-boundary SPECTRE replacement.
+
+What remains:
+
+- Run a full local SPECTRE free-boundary force-seam comparison using `G3V8L3Free`, the SPECTRE `update_bnorm` loop, and `beltrami_backend="jax"` after rebuilding/refreshing the SPECTRE checkout with the live normal-field bridge.
+- Port the virtual-casing/free-boundary normal-field Picard update to JAX if the project goal is fully standalone free-boundary SPECTRE operation without live SPECTRE normal-field arrays.
+- Broaden non-stellarator-symmetric transform/current diagnostic coverage and high-resolution 3D fixtures before claiming full default-backend replacement.

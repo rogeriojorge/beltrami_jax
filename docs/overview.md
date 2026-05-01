@@ -31,7 +31,7 @@ The package currently supports four complementary workflows:
 - released SPECTRE validation, where TOML/HDF5 coefficient fixtures and per-volume matrix/RHS/solution fixtures are loaded from packaged public compare cases
 - SPECTRE interface-geometry and matrix assembly, where TOML Fourier interfaces, free-boundary wall tables, radial bases, metric integrals, and SPECTRE volume matrices are assembled in JAX
 
-The SPEC and SPECTRE fixture workflows are the current parity-oriented paths. The internal geometry workflow is a development and demonstration path. The SPECTRE path is now the intended replacement route for the Beltrami matrix/linear-solve stage, with fixed-boundary global `Lconstraint=3` now covered and remaining work focused on free-boundary global validation, broader diagnostic branches, and production scaling.
+The SPEC and SPECTRE fixture workflows are the current parity-oriented paths. The internal geometry workflow is a development and demonstration path. The SPECTRE path is now the intended replacement route for the Beltrami matrix/linear-solve stage, with fixed-boundary and free-boundary global `Lconstraint=3` now covered for the public validation cases. Remaining work is focused on the virtual-casing/free-boundary normal-field update, broader diagnostic branches, and production scaling.
 
 The package currently provides:
 
@@ -141,10 +141,10 @@ The example scripts print progress and diagnostics. This is intentional. The goa
 
 ## Current limitations
 
-This package now performs prototype internal geometry assembly, Krylov solves, a helicity-constrained outer loop, SPECTRE matrix assembly, SPECTRE current diagnostics, SPECTRE `B_theta` diagnostics, SPECTRE rotational-transform diagnostics for validated stellarator-symmetric Fourier cases, selected local SPECTRE constraint updates, and fixed-boundary global `Lconstraint=3`, but it still does not cover:
+This package now performs prototype internal geometry assembly, Krylov solves, a helicity-constrained outer loop, SPECTRE matrix assembly, SPECTRE current diagnostics, SPECTRE `B_theta` diagnostics, SPECTRE rotational-transform diagnostics for validated stellarator-symmetric Fourier cases, selected local SPECTRE constraint updates, and fixed-boundary/free-boundary global `Lconstraint=3`, but it still does not cover:
 
 - every SPEC/SPECTRE branch and auxiliary matrix path
-- the free-boundary global SPECTRE constraint loop without injected SPECTRE normal-field metadata
+- the virtual-casing/free-boundary normal-field Picard update without live SPECTRE normal-field metadata
 - non-stellarator-symmetric SPECTRE rotational-transform/current diagnostic branches
 - broader non-stellarator-symmetric and high-resolution fixture coverage
 - full sparse production scaling

@@ -12,29 +12,12 @@ from beltrami_jax import (
     load_all_packaged_spectre_cases,
     load_packaged_spectre_case,
     load_packaged_spectre_linear_system,
+    spectre_boundary_normal_field_from_dmg,
 )
 
 
 def _fixture_normal_field(volume_map, fixture) -> SpectreBoundaryNormalField:
-    d_mg = np.asarray(fixture.system.d_mg)
-    ivns = np.zeros((volume_map.mode_count,), dtype=np.float64)
-    ibns = np.zeros((volume_map.mode_count,), dtype=np.float64)
-    ivnc = np.zeros((volume_map.mode_count,), dtype=np.float64)
-    ibnc = np.zeros((volume_map.mode_count,), dtype=np.float64)
-
-    for mode_index, one_based_id in enumerate(volume_map.lme):
-        if one_based_id > 0:
-            ivns[mode_index] = -d_mg[one_based_id - 1]
-    for mode_index, one_based_id in enumerate(volume_map.lmf):
-        if one_based_id > 0:
-            ivnc[mode_index] = -d_mg[one_based_id - 1]
-
-    return SpectreBoundaryNormalField(
-        ivns=ivns,
-        ibns=ibns,
-        ivnc=ivnc,
-        ibnc=ibnc,
-    )
+    return spectre_boundary_normal_field_from_dmg(volume_map, fixture.system.d_mg)
 
 
 def test_matrix_bg_from_fixed_boundary_input_matches_spectre_fixtures() -> None:

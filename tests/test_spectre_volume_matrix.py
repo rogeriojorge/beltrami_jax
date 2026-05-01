@@ -27,6 +27,7 @@ from beltrami_jax import (
     solve_spectre_volumes_from_input,
     solve_spectre_volume_from_input,
     spectre_effective_current_profiles,
+    spectre_boundary_normal_field_from_dmg,
     spectre_lconstraint3_mu,
     spectre_normalized_fluxes,
     spectre_volume_flux_vector,
@@ -84,6 +85,20 @@ def _synthetic_metric_integrals(*, lrad: int, mode_count: int, enforce_stellarat
         coordinate_singularity=False,
         enforce_stellarator_symmetry=enforce_stellarator_symmetry,
     )
+
+
+def _fixture_normal_field_by_volume(case):
+    layout = build_spectre_dof_layout(case.input_summary)
+    return {
+        volume_map.block.index + 1: spectre_boundary_normal_field_from_dmg(
+            volume_map,
+            load_packaged_spectre_linear_system(
+                case_label=case.label,
+                volume_index=volume_map.block.index + 1,
+            ).system.d_mg,
+        )
+        for volume_map in layout.volume_maps
+    }
 
 
 def _synthetic_lconstraint3_summary(
@@ -595,6 +610,39 @@ def test_toml_multi_volume_lconstraint3_global_solve_matches_reference_without_s
         solve_spectre_volumes_from_input(case.input_summary, volumes=(1, 2), solve_local_constraints=True)
     with pytest.raises(ValueError, match="do not pass overrides"):
         solve_spectre_volumes_from_input(case.input_summary, mu={1: 0.0}, solve_local_constraints=True)
+
+
+def test_toml_free_boundary_lconstraint3_global_solve_matches_reference_with_updated_normal_field_state() -> None:
+    case = load_packaged_spectre_case("G3V8L3Free")
+    normal_field = _fixture_normal_field_by_volume(case)
+
+    result = solve_spectre_volumes_from_input(
+        case.input_summary,
+        solve_local_constraints=True,
+        normal_field=normal_field,
+    )
+
+    assert result.global_constraint is not None
+    assert result.global_constraint.unknowns == (
+        "dpflux_lvol2",
+        "dpflux_lvol3",
+        "dpflux_lvol4",
+        "dpflux_lvol5",
+        "dpflux_lvol6",
+        "dpflux_lvol7",
+        "dpflux_lvol8",
+        "dpflux_lvol9",
+        "dtflux_lvol9",
+    )
+    assert float(result.global_constraint.initial_residual_norm) > 1.0e-2
+    assert float(result.global_constraint.residual_norm) < 2.0e-13
+    for volume_solve in result.volume_solves:
+        fixture = load_packaged_spectre_linear_system(case_label=case.label, volume_index=volume_solve.lvol)
+        np.testing.assert_allclose(float(volume_solve.mu), float(fixture.system.mu), rtol=3e-13, atol=3e-13)
+        np.testing.assert_allclose(np.asarray(volume_solve.psi), np.asarray(fixture.system.psi), rtol=4e-11, atol=4e-11)
+
+    comparison = compare_vector_potentials(result.vector_potential, case.reference.vector_potential, label="G3V8L3Free")
+    assert comparison.global_relative_error < 2.0e-13
 
 
 def test_spectre_solve_helpers_cover_empty_and_invalid_volume_selections() -> None:

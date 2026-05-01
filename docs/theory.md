@@ -474,8 +474,8 @@ The repository now covers the supported Beltrami workflow end to end:
 - SPECTRE TOML-to-volume and TOML-to-full-coefficient solves that unpack directly to `Ate/Aze/Ato/Azo` for validated branches
 - dense and GMRES linear solves
 - SPECTRE local branch derivative solves and `Lconstraint` residual/Jacobian formulas with JAX current and rotational-transform diagnostics for validated branches
-- SPECTRE fixed-boundary `Lconstraint=3` global-current updates using JAX `B_theta` diagnostics
+- SPECTRE fixed-boundary/free-boundary `Lconstraint=3` global-current updates using JAX `B_theta` and current diagnostics
 - a helicity-constrained outer update for `mu`
 - axis-regularized basis handling near the coordinate singularity
 
-What still remains outside the current implementation is free-boundary global validation without injected normal-field state, non-stellarator-symmetric transform/current branches, and broader fixture coverage needed before the SPECTRE fork can remove its Fortran Beltrami path by default.
+What still remains outside the current implementation is JAX-native virtual-casing/free-boundary normal-field updates, non-stellarator-symmetric transform/current branches, and broader fixture coverage needed before the SPECTRE fork can remove its Fortran Beltrami path by default.

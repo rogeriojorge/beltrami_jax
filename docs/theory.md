@@ -323,6 +323,57 @@ $$
 
 with the coordinate-axis branch using only the outer residual.
 
+For the semi-global `Lconstraint=3` branch, SPECTRE does not iterate local
+unknowns volume by volume. It first recomputes the Beltrami multiplier from the
+prescribed enclosed toroidal-current profile:
+
+$$
+\mu_1 = \frac{I_1}{\phi_1\,\Phi_\mathrm{edge}},
+\qquad
+\mu_l =
+\frac{I_l-I_{l-1}}{(\phi_l-\phi_{l-1})\,\Phi_\mathrm{edge}},
+$$
+
+where $\phi_l$ are the SPECTRE-normalized cumulative toroidal fluxes. The
+global current residual on interface $l$ is then
+
+$$
+F_l =
+2\pi\left(B_{\theta,l+1}^{\mathrm{inner}}
+          - B_{\theta,l}^{\mathrm{outer}}\right)
+- I_{\mathrm{surf},l}.
+$$
+
+The diagnostic $B_\theta$ is the `(0,0)` Fourier coefficient produced by
+SPECTRE `lbpol`: the vector-potential endpoint derivatives are transformed to
+real space, lowered with the metric, and averaged over the angular grid,
+
+$$
+B_\theta =
+\left\langle
+\left(-B^\theta g_{\theta\theta}
+      + B^\zeta g_{\theta\zeta}\right) J^{-1}
+\right\rangle_{\theta,\zeta}.
+$$
+
+The fixed-boundary global Newton system uses the derivative solves with respect
+to each coupled $\Delta\psi_p$ to form
+
+$$
+\frac{\partial F_l}{\partial \Delta\psi_{p,k}}
+=
+2\pi\left(
+\frac{\partial B_{\theta,l+1}^{\mathrm{inner}}}{\partial \Delta\psi_{p,k}}
+-
+\frac{\partial B_{\theta,l}^{\mathrm{outer}}}{\partial \Delta\psi_{p,k}}
+\right),
+$$
+
+with the same sparse coupling pattern as `forces_mod.F90::dfp100`.
+`solve_spectre_volumes_from_input(..., solve_local_constraints=True)` now
+applies this SPECTRE global correction for the validated fixed-boundary
+`Lconstraint=3` case and then re-solves the affected volumes in JAX.
+
 ## Internal assembly model in `beltrami_jax`
 
 The internal workflow in this repository constructs a packed Fourier basis over a shaped large-aspect-ratio torus. At the continuous level, the assembled operators approximate
@@ -423,7 +474,8 @@ The repository now covers the supported Beltrami workflow end to end:
 - SPECTRE TOML-to-volume and TOML-to-full-coefficient solves that unpack directly to `Ate/Aze/Ato/Azo` for validated branches
 - dense and GMRES linear solves
 - SPECTRE local branch derivative solves and `Lconstraint` residual/Jacobian formulas with JAX current and rotational-transform diagnostics for validated branches
+- SPECTRE fixed-boundary `Lconstraint=3` global-current updates using JAX `B_theta` diagnostics
 - a helicity-constrained outer update for `mu`
 - axis-regularized basis handling near the coordinate singularity
 
-What still remains outside the current implementation is the global/semi-global SPECTRE nonlinear update layer, non-stellarator-symmetric transform/current branches, and broader fixture coverage needed before the SPECTRE fork can remove its Fortran Beltrami path by default.
+What still remains outside the current implementation is free-boundary global validation without injected normal-field state, non-stellarator-symmetric transform/current branches, and broader fixture coverage needed before the SPECTRE fork can remove its Fortran Beltrami path by default.

@@ -121,6 +121,8 @@ class SpectreInputSummary:
         return {
             "lconstraint": int(self.physics.get("lconstraint", 0)),
             "mu": tuple(float(value) for value in self.physics.get("mu", ())),
+            "ivolume": tuple(float(value) for value in self.physics.get("ivolume", ())),
+            "isurf": tuple(float(value) for value in self.physics.get("isurf", ())),
             "iota": tuple(float(value) for value in self.physics.get("iota", ())),
             "oita": tuple(float(value) for value in self.physics.get("oita", ())),
             "helicity": tuple(float(value) for value in self.physics.get("helicity", ())),

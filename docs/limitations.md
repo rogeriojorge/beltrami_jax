@@ -10,7 +10,7 @@ The current package is deliberately narrower than the long-term project goal.
 
 ### Not a full SPECTRE port
 
-The package is intended as a candidate Beltrami kernel for SPECTRE integration, but it does not yet match SPECTRE's full backend contract. SPECTRE TOML input summaries, HDF5 vector-potential coefficient comparison, packed radial layouts, solution-vector pack/unpack maps, released SPECTRE matrix/RHS/solution parity fixtures, local `Lconstraint` branch formulas, a JAX-native interface-geometry evaluator, SPECTRE `matrixBG` `dMB/dMG` boundary assembly, SPECTRE `dMA/dMD` matrix assembly, centroid-style toroidal axis initialization, TOML-driven per-volume and multi-volume `Ate/Aze/Ato/Azo` solves, branch derivative vector-potential blocks, SPECTRE current diagnostics, a SPECTRE Fourier rotational-transform diagnostic for validated stellarator-symmetric `Lsparse=0/3` cases, selected local constraint updates, and an experimental SPECTRE injection seam are now implemented. The remaining milestone is making the global/semi-global update path and the non-stellarator-symmetric transform/current branches work directly instead of receiving final SPECTRE-updated values as validation inputs.
+The package is intended as a candidate Beltrami kernel for SPECTRE integration, but it does not yet match SPECTRE's full backend contract. SPECTRE TOML input summaries, HDF5 vector-potential coefficient comparison, packed radial layouts, solution-vector pack/unpack maps, released SPECTRE matrix/RHS/solution parity fixtures, local `Lconstraint` branch formulas, a JAX-native interface-geometry evaluator, SPECTRE `matrixBG` `dMB/dMG` boundary assembly, SPECTRE `dMA/dMD` matrix assembly, centroid-style toroidal axis initialization, TOML-driven per-volume and multi-volume `Ate/Aze/Ato/Azo` solves, branch derivative vector-potential blocks, SPECTRE current diagnostics, SPECTRE `lbpol` `B_theta` diagnostics, a SPECTRE Fourier rotational-transform diagnostic for validated stellarator-symmetric `Lsparse=0/3` cases, selected local constraint updates, fixed-boundary global `Lconstraint=3`, and an experimental SPECTRE injection seam are now implemented. The remaining milestone is making the free-boundary global path, non-stellarator-symmetric transform/current branches, and broader high-resolution fixtures work directly instead of receiving final SPECTRE-updated values as validation inputs.
 
 ### Limited linear-algebra coverage
 
@@ -26,11 +26,11 @@ The current implementation supports:
 - SPECTRE `matrixBG` boundary-source assembly for `dMB/dMG`
 - SPECTRE radial basis, quadrature, metric-integral, and `dMA/dMD` matrix contraction for the packaged cylindrical, toroidal, free-boundary, and vacuum branches
 - TOML-driven per-volume and multi-volume solves that unpack to SPECTRE-compatible `Ate/Aze/Ato/Azo`
-- derivative vector-potential blocks, magnetic energy/helicity integrals, SPECTRE current diagnostics, SPECTRE rotational-transform diagnostics for validated stellarator-symmetric Fourier cases, and selected local current/helicity/transform constraint updates
+- derivative vector-potential blocks, magnetic energy/helicity integrals, SPECTRE current diagnostics, SPECTRE `B_theta` diagnostics, SPECTRE rotational-transform diagnostics for validated stellarator-symmetric Fourier cases, selected local current/helicity/transform constraint updates, and fixed-boundary global `Lconstraint=3` updates
 - dense and GMRES solve paths
 - an outer helicity-constrained nonlinear update
 
-It does not yet cover every branch and auxiliary path present in SPEC/SPECTRE Fortran. The main open branch work is global/semi-global nonlinear updates, non-stellarator-symmetric transform/current diagnostics, broader high-resolution fixtures, and production sparse/matrix-free scaling.
+It does not yet cover every branch and auxiliary path present in SPEC/SPECTRE Fortran. The main open branch work is free-boundary global validation without SPECTRE normal-field injection, non-stellarator-symmetric transform/current diagnostics, broader high-resolution fixtures, and production sparse/matrix-free scaling.
 
 ### Limited fixture diversity
 
@@ -43,7 +43,7 @@ The near-term roadmap is:
 1. enable and verify the hosted Read the Docs project
 2. add more public SPECTRE HDF5 vector-potential comparison cases
 3. rebuild and validate the new SPECTRE `set_vec_pot`/`solve_beltrami_jax` injection seam
-4. extend rotational-transform/current diagnostics beyond the validated stellarator-symmetric local branches and wire them into the global/semi-global update path
+4. extend rotational-transform/current diagnostics beyond the validated stellarator-symmetric local branches and validate the free-boundary global update path
 5. broaden benchmarks beyond the current dense-regression and compact internal-geometry cases
 6. add broader SPEC/SPECTRE parity tests for branch-specific geometry terms
 
@@ -71,7 +71,8 @@ It is easy to overstate progress on a project like this. The correct current sta
 - SPECTRE `dMA/dMD` matrix assembly now matches released SPECTRE fixtures for cylindrical axis/bulk volumes, toroidal generated-interface volumes, explicit-interface free-boundary volumes, and the free-boundary vacuum volume
 - TOML-driven SPECTRE volume solves now produce per-volume and full-case `Ate/Aze/Ato/Azo` directly for validated branches when supplied the same post-constraint `mu`/flux values used by SPECTRE
 - SPECTRE current diagnostics, local `Lconstraint=2` helicity updates, and local `Lconstraint=1` rotational-transform updates are now represented and tested from JAX-solved coefficients
+- SPECTRE fixed-boundary `Lconstraint=3` global-current updates are now represented and tested from TOML initial state for the public `G3V3L3Fi` case
 - the local SPECTRE fork has an optional `SPECTRE.solve_beltrami_jax(...)` seam that can inject a full `beltrami_jax` coefficient block after rebuild
-- exact JAX-native parity without injected post-constraint SPECTRE metadata is now demonstrated for the packaged local `Lconstraint=1` branch and still remains future work for global/semi-global branches and broader geometry coverage
+- exact JAX-native parity without injected post-constraint SPECTRE metadata is now demonstrated for the packaged local `Lconstraint=1` branch and fixed-boundary `Lconstraint=3` branch, and still remains future work for free-boundary global branches and broader geometry coverage
 
 That distinction matters for both scientific correctness and future integration planning.

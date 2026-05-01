@@ -61,6 +61,10 @@ The SPECTRE TOML full-solve path generates a full coefficient reconstruction pan
 
 ![SPECTRE TOML full solve](_static/spectre_toml_full_solve.png)
 
+The fixed-boundary SPECTRE `Lconstraint=3` global-current solve generates a TOML-initial-state closure panel:
+
+![SPECTRE Lconstraint=3 global-current closure](_static/spectre_lconstraint3_global.png)
+
 These figures summarize:
 
 - coefficient-level agreement between SPEC and `beltrami_jax`
@@ -74,6 +78,7 @@ These figures summarize:
 - SPECTRE interface geometry, Jacobian, and metric tensor evaluation from packaged TOML input
 - SPECTRE `matrixBG` `dMB/dMG` boundary assembly parity for fixed-boundary fixtures and exact updated-normal-field source parity for all packaged fixtures
 - full SPECTRE TOML/interface-geometry assembly, solve, unpack, and coefficient comparison for all packed `G3V3L3Fi` volumes
+- fixed-boundary SPECTRE `Lconstraint=3` global-current closure from TOML initial state for `G3V3L3Fi`
 
 Release-gate example outputs generated from the current source tree:
 
@@ -176,9 +181,11 @@ The test suite verifies:
 - `solve_spectre_volume_from_input` is tested in a TOML-driven solve/unpack path that returns the same SPECTRE vector-potential block when supplied the same post-constraint branch `mu` and flux vector used by SPECTRE.
 - `compute_spectre_plasma_current` is tested on a solved SPECTRE coefficient block, including derivatives with respect to the two branch derivative solves.
 - `compute_spectre_rotational_transform` ports the SPECTRE Fourier `Lsparse=0/3` straight-field-line diagnostic for stellarator-symmetric inputs and is tested on the public `G2V32L1Fi` `Lconstraint=1` case.
+- `compute_spectre_btheta_mean` ports the SPECTRE `lbpol` interface-averaged covariant `B_theta` diagnostic used by the global `Lconstraint=3` branch.
 - `solve_spectre_volume_from_input(..., solve_local_constraints=True)` is tested on the `G3V3L2Fi_stability` plasma helicity branch and satisfies the local `Lconstraint=2` residual at the SPECTRE reference state.
 - `solve_spectre_volume_from_input(..., solve_local_constraints=True)` is also tested on the `G2V32L1Fi` rotational-transform branch; the generated validation panel closes all four local `Lconstraint=1` volumes from TOML initial state with worst transform residual `6.99e-15`, worst post-constraint state error `3.18e-14`, and worst per-volume coefficient relative error `1.22e-14`.
 - `solve_spectre_volumes_from_input` is tested in a full TOML-to-`Ate/Aze/Ato/Azo` path that reconstructs all packed `G3V3L3Fi` coefficients with global relative error `1.69e-14` when supplied the same post-constraint branch state used by SPECTRE.
+- `solve_spectre_volumes_from_input(..., solve_local_constraints=True)` now solves the fixed-boundary `G3V3L3Fi` `Lconstraint=3` branch from TOML initial state. It recomputes SPECTRE's `mu` from `Ivolume/tflux`, evaluates interface-current residuals from JAX `B_theta`, applies the global Newton correction to coupled `dpflux`, and reconstructs SPECTRE coefficients with global relative error `1.68e-14`.
 
 Current public SPECTRE compare-case results:
 
@@ -255,10 +262,10 @@ Committed validation summary:
 - local SPECTRE runtime injection seam: coefficient injection relative copy error `0.0`
 - opt-in `force_real(..., beltrami_backend="jax")` path: relative force error `1.25e-12` on `G3V3L2Fi_stability`
 
-Expected non-roundoff force errors remain on `G3V3L3Fi` (`Lconstraint=3`)
-because the global/semi-global flux update is still open. The older
-`G2V32L1Fi` SPECTRE seam force error predates the JAX transform closure and
-must be regenerated after the SPECTRE fork calls the new local constraint path.
+The runtime SPECTRE seam panel predates the fixed-boundary `Lconstraint=3`
+global-current closure and the `G2V32L1Fi` transform closure. It should be
+regenerated after the SPECTRE fork calls `solve_local_constraints=True` for
+those branches.
 
 ![SPECTRE backend seam runtime validation](_static/spectre_backend_seam_runtime.png)
 
@@ -287,8 +294,9 @@ The SPECTRE branch tests cover the local pieces ported from
 - plasma, vacuum, and coordinate-singularity-current derivative right-hand-side formulas are checked explicitly.
 - `evaluate_spectre_constraints` checks residual/Jacobian formulas for current, rotational-transform, helicity, no-iteration, and global-constraint branches using injected diagnostic arrays.
 - `compute_spectre_rotational_transform` and `solve_spectre_volume_from_input(..., solve_local_constraints=True)` close the packaged `G2V32L1Fi` local transform branch from TOML initial state.
+- `compute_spectre_btheta_mean` and `solve_spectre_volumes_from_input(..., solve_local_constraints=True)` close the packaged fixed-boundary `G3V3L3Fi` global-current branch from TOML initial state.
 
-This validates the branch contract and the first JAX-native transform diagnostic branch before broader non-stellarator-symmetric and global/semi-global branches are complete.
+This validates the branch contract, the first JAX-native transform diagnostic branch, and the first fixed-boundary global-current branch before broader non-stellarator-symmetric and free-boundary global branches are complete.
 
 ## Coverage target
 
@@ -307,9 +315,9 @@ Remaining validation work includes:
 - final-state SPECTRE HDF5 vector-potential coefficient generation without injecting post-constraint SPECTRE `mu`/flux values
 - broader JAX-native rotational-transform diagnostics beyond the validated stellarator-symmetric local branch
 - dedicated SPECTRE dumps of `dItGpdxtp` values for stronger current-diagnostic parity
-- SPECTRE global/semi-global `Lconstraint=3` force-coupled update parity
+- SPECTRE free-boundary `Lconstraint=3` force-coupled update parity without injected normal-field state
 - broader 3D fixture coverage closer to anticipated SPECTRE use cases
-- end-to-end SPECTRE fork integration once global/semi-global nonlinear updates are complete
+- end-to-end SPECTRE fork integration once free-boundary global nonlinear updates and broader branch coverage are complete
 
 ## Why exact dense regression matters
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from beltrami_jax import (
+    SpectreGlobalConstraintEvaluation,
     SpectreInputSummary,
     SpectreMetricIntegrals,
     assemble_spectre_matrix_ad,
@@ -14,17 +16,26 @@ from beltrami_jax import (
     build_spectre_dof_layout,
     build_spectre_interface_geometry,
     chebyshev_basis,
+    compute_spectre_btheta_mean,
     compute_spectre_plasma_current,
     compute_spectre_rotational_transform,
+    compare_vector_potentials,
     load_packaged_spectre_case,
     load_packaged_spectre_linear_system,
     solve_spectre_assembled,
     solve_spectre_toml,
     solve_spectre_volumes_from_input,
     solve_spectre_volume_from_input,
+    spectre_effective_current_profiles,
+    spectre_lconstraint3_mu,
     spectre_normalized_fluxes,
     spectre_volume_flux_vector,
     zernike_axis_basis,
+)
+from beltrami_jax.spectre_solve import (
+    _apply_lconstraint3_correction,
+    _lconstraint3_total_pflux,
+    _lconstraint3_unknowns,
 )
 
 
@@ -72,6 +83,57 @@ def _synthetic_metric_integrals(*, lrad: int, mode_count: int, enforce_stellarat
         nz=8,
         coordinate_singularity=False,
         enforce_stellarator_symmetry=enforce_stellarator_symmetry,
+    )
+
+
+def _synthetic_lconstraint3_summary(
+    *,
+    source: str = "synthetic_lconstraint3",
+    igeometry: int = 3,
+    nvol: int = 2,
+    lrad: list[int] | None = None,
+    tflux: list[float] | None = None,
+    pflux: list[float] | None = None,
+    ivolume: list[float] | None = None,
+    isurf: list[float] | None = None,
+    lfreebound: bool = False,
+    curtor: float = 0.0,
+    phiedge: float = 1.0,
+) -> SpectreInputSummary:
+    lrad = [1] * nvol if lrad is None else lrad
+    packed = len(lrad)
+    tflux = [float(i + 1) for i in range(packed)] if tflux is None else tflux
+    pflux = [0.25 * float(i + 1) for i in range(packed)] if pflux is None else pflux
+    ivolume = [float(i + 1) for i in range(packed)] if ivolume is None else ivolume
+    isurf = [0.1 * float(i + 1) for i in range(max(packed - 1, 0))] if isurf is None else isurf
+    return SpectreInputSummary(
+        source=source,
+        physics={
+            "igeometry": igeometry,
+            "nfp": 1,
+            "nvol": nvol,
+            "mpol": 0,
+            "ntor": 0,
+            "lrad": lrad,
+            "tflux": tflux,
+            "pflux": pflux,
+            "mu": [0.0] * nvol,
+            "helicity": [0.0] * packed,
+            "lconstraint": 3,
+            "ivolume": ivolume,
+            "isurf": isurf,
+            "lfreebound": lfreebound,
+            "curtor": curtor,
+            "phiedge": phiedge,
+        },
+        numeric={},
+        global_options={},
+        local={},
+        diagnostics={},
+        rbc={},
+        zbs={},
+        rbs={},
+        zbc={},
     )
 
 
@@ -217,6 +279,22 @@ def test_spectre_volume_flux_vector_matches_released_fixture_metadata() -> None:
         )
 
 
+def test_spectre_lconstraint3_mu_matches_released_fixture_metadata() -> None:
+    for label in ("G3V3L3Fi", "G3V8L3Free"):
+        case = load_packaged_spectre_case(label)
+        ivolume, isurf = spectre_effective_current_profiles(case.input_summary)
+        assert ivolume.shape == (case.input_summary.packed_volume_count,)
+        assert isurf.shape == (case.input_summary.packed_volume_count - 1,)
+        for lvol in range(1, case.input_summary.nvol + 1):
+            fixture = load_packaged_spectre_linear_system(case_label=label, volume_index=lvol)
+            np.testing.assert_allclose(
+                float(spectre_lconstraint3_mu(case.input_summary, lvol=lvol)),
+                float(fixture.system.mu),
+                rtol=3e-13,
+                atol=3e-13,
+            )
+
+
 def test_solve_spectre_volume_from_input_produces_vector_potential_coefficients() -> None:
     case = load_packaged_spectre_case("G3V3L3Fi")
     lvol = 2
@@ -280,6 +358,34 @@ def test_spectre_plasma_current_diagnostic_uses_solution_derivatives() -> None:
 
     with pytest.raises(ValueError, match="outside"):
         compute_spectre_plasma_current(case.input_summary, lvol=99, vector_potential=result.vector_potential)
+
+
+def test_spectre_btheta_mean_diagnostic_feeds_lconstraint3_global_system() -> None:
+    case = load_packaged_spectre_case("G3V3L3Fi")
+    lvol = 2
+    fixture = load_packaged_spectre_linear_system(case_label=case.label, volume_index=lvol)
+    result = solve_spectre_volume_from_input(
+        case.input_summary,
+        lvol=lvol,
+        mu=fixture.system.mu,
+        psi=fixture.system.psi,
+    )
+    diagnostic = compute_spectre_btheta_mean(
+        case.input_summary,
+        lvol=lvol,
+        innout=0,
+        vector_potential=result.vector_potential,
+        derivative_vector_potentials=result.derivative_vector_potentials,
+    )
+
+    assert diagnostic.derivative_btheta.shape == (2,)
+    assert np.all(np.isfinite(np.asarray(diagnostic.derivative_btheta)))
+    np.testing.assert_allclose(float(diagnostic.btheta), -5.330092802070351e-06, rtol=2e-9, atol=2e-13)
+
+    with pytest.raises(ValueError, match="innout"):
+        compute_spectre_btheta_mean(case.input_summary, lvol=lvol, innout=2, vector_potential=result.vector_potential)
+    with pytest.raises(ValueError, match="outside"):
+        compute_spectre_btheta_mean(case.input_summary, lvol=99, innout=0, vector_potential=result.vector_potential)
 
 
 def test_spectre_rotational_transform_diagnostic_matches_lconstraint1_targets() -> None:
@@ -469,10 +575,32 @@ def test_toml_multi_volume_solve_returns_full_vector_potential_block() -> None:
         )
 
 
+def test_toml_multi_volume_lconstraint3_global_solve_matches_reference_without_state_injection() -> None:
+    case = load_packaged_spectre_case("G3V3L3Fi")
+
+    result = solve_spectre_volumes_from_input(case.input_summary, solve_local_constraints=True)
+
+    assert result.global_constraint is not None
+    assert result.global_constraint.unknowns == ("dpflux_lvol2", "dpflux_lvol3")
+    assert float(result.global_constraint.initial_residual_norm) > 1.0e-4
+    assert float(result.global_constraint.residual_norm) < 1.0e-13
+    for volume_solve in result.volume_solves:
+        fixture = load_packaged_spectre_linear_system(case_label=case.label, volume_index=volume_solve.lvol)
+        np.testing.assert_allclose(float(volume_solve.mu), float(fixture.system.mu), rtol=3e-13, atol=3e-13)
+        np.testing.assert_allclose(np.asarray(volume_solve.psi), np.asarray(fixture.system.psi), rtol=3e-12, atol=3e-12)
+    comparison = compare_vector_potentials(result.vector_potential, case.reference.vector_potential, label="G3V3L3Fi")
+    assert comparison.global_relative_error < 2.0e-13
+
+    with pytest.raises(ValueError, match="all packed volumes"):
+        solve_spectre_volumes_from_input(case.input_summary, volumes=(1, 2), solve_local_constraints=True)
+    with pytest.raises(ValueError, match="do not pass overrides"):
+        solve_spectre_volumes_from_input(case.input_summary, mu={1: 0.0}, solve_local_constraints=True)
+
+
 def test_spectre_solve_helpers_cover_empty_and_invalid_volume_selections() -> None:
     case = load_packaged_spectre_case("G3V3L3Fi")
 
-    empty = solve_spectre_volumes_from_input(case.input_summary, volumes=())
+    empty = solve_spectre_volumes_from_input(case.input_summary, volumes=(), verbose=True)
     assert empty.vector_potential.shape == (0, 0)
     assert float(empty.max_relative_residual_norm) == 0.0
 
@@ -485,6 +613,120 @@ def test_spectre_solve_helpers_cover_empty_and_invalid_volume_selections() -> No
         solve_spectre_volume_from_input(case.input_summary, lvol=99)
     with pytest.raises(ValueError, match="outside"):
         spectre_volume_flux_vector(case.input_summary, lvol=99)
+
+
+def test_spectre_lconstraint3_helper_branches_and_validation_errors() -> None:
+    empty_constraint = SpectreGlobalConstraintEvaluation(
+        lconstraint=3,
+        unknowns=(),
+        initial_residual=np.zeros((0,), dtype=np.float64),
+        jacobian=np.zeros((0, 0), dtype=np.float64),
+        correction=np.zeros((0,), dtype=np.float64),
+        final_residual=np.zeros((0,), dtype=np.float64),
+    )
+    assert float(empty_constraint.initial_residual_norm) == 0.0
+    assert float(empty_constraint.residual_norm) == 0.0
+
+    base_summary = _synthetic_lconstraint3_summary()
+    non_lconstraint3 = replace(base_summary, physics={**base_summary.physics, "lconstraint": 0})
+    ivolume, isurf = spectre_effective_current_profiles(non_lconstraint3)
+    np.testing.assert_allclose(ivolume, np.asarray(non_lconstraint3.physics["ivolume"], dtype=np.float64))
+    np.testing.assert_allclose(isurf, np.asarray(non_lconstraint3.physics["isurf"], dtype=np.float64))
+    with pytest.raises(ValueError, match="only applies"):
+        spectre_lconstraint3_mu(non_lconstraint3, lvol=1)
+
+    with pytest.raises(ValueError, match="ivolume length"):
+        spectre_effective_current_profiles(_synthetic_lconstraint3_summary(ivolume=[1.0]))
+    with pytest.raises(ValueError, match="isurf"):
+        spectre_effective_current_profiles(_synthetic_lconstraint3_summary(isurf=[]))
+
+    free = _synthetic_lconstraint3_summary(
+        nvol=2,
+        lrad=[1, 1, 1],
+        tflux=[1.0, 2.0, 3.0],
+        pflux=[0.1, 0.2, 0.3],
+        ivolume=[1.0, 2.0, 999.0],
+        isurf=[3.0, 5.0],
+        lfreebound=True,
+        curtor=20.0,
+    )
+    ivolume, isurf = spectre_effective_current_profiles(free)
+    np.testing.assert_allclose(ivolume, np.asarray([2.0, 4.0, 4.0]))
+    np.testing.assert_allclose(isurf, np.asarray([6.0, 10.0]))
+    assert _lconstraint3_unknowns(free) == ("dpflux_lvol2", "dpflux_lvol3", "dtflux_lvol3")
+    assert _lconstraint3_total_pflux(free) == 0.0
+
+    with pytest.raises(ValueError, match="nonzero curtor"):
+        spectre_effective_current_profiles(
+            _synthetic_lconstraint3_summary(
+                nvol=2,
+                lrad=[1, 1, 1],
+                ivolume=[0.0, 0.0, 0.0],
+                isurf=[0.0, 0.0],
+                lfreebound=True,
+                curtor=1.0,
+            )
+        )
+    with pytest.raises(ValueError, match="zero curtor"):
+        spectre_effective_current_profiles(
+            _synthetic_lconstraint3_summary(
+                nvol=2,
+                lrad=[1, 1, 1],
+                ivolume=[1.0, 2.0, 3.0],
+                isurf=[0.0, 0.0],
+                lfreebound=True,
+                curtor=0.0,
+            )
+        )
+
+    cylindrical = _synthetic_lconstraint3_summary(
+        source="synthetic_cylindrical_lconstraint3",
+        igeometry=1,
+        nvol=2,
+        tflux=[1.0, 2.0],
+        pflux=[1.0, 99.0],
+        ivolume=[1.0, 3.0],
+        isurf=[0.5],
+        phiedge=2.0,
+    )
+    _, pflux = spectre_normalized_fluxes(cylindrical)
+    np.testing.assert_allclose(pflux, np.asarray([0.5, 0.0]))
+    assert _lconstraint3_unknowns(cylindrical) == ("dpflux_lvol2", "dpflux_lvol1")
+    np.testing.assert_allclose(
+        _lconstraint3_total_pflux(cylindrical),
+        99.0 / 2.0 * 2.0 / (2.0 * np.pi),
+    )
+    assert float(spectre_lconstraint3_mu(cylindrical, lvol=3)) == 0.0
+
+    with pytest.raises(ValueError, match="zero toroidal-flux interval"):
+        spectre_lconstraint3_mu(
+            _synthetic_lconstraint3_summary(tflux=[0.0, 1.0], ivolume=[1.0, 2.0], isurf=[0.1]),
+            lvol=1,
+        )
+    with pytest.raises(ValueError, match="nonzero"):
+        _lconstraint3_total_pflux(_synthetic_lconstraint3_summary(igeometry=1, tflux=[1.0, 0.0]))
+
+
+def test_spectre_lconstraint3_correction_updates_coupled_fluxes() -> None:
+    free = _synthetic_lconstraint3_summary(nvol=2, lrad=[1, 1, 1], lfreebound=True)
+    free_solves = (
+        SimpleNamespace(lvol=1, psi=np.asarray([1.0, 10.0])),
+        SimpleNamespace(lvol=2, psi=np.asarray([2.0, 20.0])),
+        SimpleNamespace(lvol=3, psi=np.asarray([3.0, 30.0])),
+    )
+    updated_free = _apply_lconstraint3_correction(free, free_solves, np.asarray([1.0, 2.0, 3.0]))
+    np.testing.assert_allclose(np.asarray(updated_free[1]), np.asarray([1.0, 10.0]))
+    np.testing.assert_allclose(np.asarray(updated_free[2]), np.asarray([2.0, 19.0]))
+    np.testing.assert_allclose(np.asarray(updated_free[3]), np.asarray([0.0, 28.0]))
+
+    cylindrical = _synthetic_lconstraint3_summary(igeometry=1, nvol=2)
+    cylindrical_solves = (
+        SimpleNamespace(lvol=1, psi=np.asarray([1.0, 10.0])),
+        SimpleNamespace(lvol=2, psi=np.asarray([2.0, 20.0])),
+    )
+    updated_cylindrical = _apply_lconstraint3_correction(cylindrical, cylindrical_solves, np.asarray([2.0, 3.0]))
+    np.testing.assert_allclose(np.asarray(updated_cylindrical[1]), np.asarray([1.0, 7.0]))
+    np.testing.assert_allclose(np.asarray(updated_cylindrical[2]), np.asarray([2.0, 18.0]))
 
 
 def test_spectre_flux_helpers_validate_bad_summary_data() -> None:

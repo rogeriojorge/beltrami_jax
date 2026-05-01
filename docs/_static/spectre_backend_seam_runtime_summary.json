@@ -21,13 +21,13 @@
       "case": "G3V3L3Fi",
       "branch": "semi-global flux, Lconstraint=3",
       "relative_force_error": 0.0016675304372497828,
-      "status": "expected gap: global/semi-global update not ported"
+      "status": "superseded measurement: fixed-boundary global-current closure is now ported; SPECTRE seam rerun pending"
     },
     {
       "case": "G2V32L1Fi",
       "branch": "rotational transform, Lconstraint=1",
       "relative_force_error": 0.024055140334128033,
-      "status": "expected gap: rotational-transform diagnostic not ported"
+      "status": "superseded measurement: rotational-transform closure is now ported for the packaged branch; SPECTRE seam rerun pending"
     }
   ]
 }

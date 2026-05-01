@@ -18,9 +18,14 @@ from .spectre_constraints import (
     evaluate_spectre_local_constraints,
     spectre_local_unknown_count,
 )
-from .spectre_diagnostics import compute_spectre_plasma_current, compute_spectre_rotational_transform
+from .spectre_diagnostics import (
+    compute_spectre_btheta_mean,
+    compute_spectre_plasma_current,
+    compute_spectre_rotational_transform,
+)
 from .spectre_input import SpectreInputSummary, load_spectre_input_toml
 from .spectre_io import SpectreVectorPotential
+from .spectre_geometry import build_spectre_interface_geometry
 from .spectre_matrix import SpectreBoundaryNormalField
 from .spectre_pack import SpectreVolumeDofMap, build_spectre_dof_layout
 from .spectre_volume_matrix import SpectreVolumeMatrices, assemble_spectre_volume_matrices_from_input
@@ -63,6 +68,34 @@ class SpectreVolumeSolve:
 
 
 @dataclass(frozen=True)
+class SpectreGlobalConstraintEvaluation:
+    """SPECTRE semi-global ``Lconstraint=3`` Newton correction record."""
+
+    lconstraint: int
+    unknowns: tuple[str, ...]
+    initial_residual: Array
+    jacobian: Array
+    correction: Array
+    final_residual: Array
+
+    @property
+    def initial_residual_norm(self) -> Array:
+        """Infinity norm before the global Newton correction."""
+
+        if self.initial_residual.size == 0:
+            return jnp.asarray(0.0, dtype=jnp.float64)
+        return jnp.max(jnp.abs(self.initial_residual))
+
+    @property
+    def residual_norm(self) -> Array:
+        """Infinity norm after the global Newton correction."""
+
+        if self.final_residual.size == 0:
+            return jnp.asarray(0.0, dtype=jnp.float64)
+        return jnp.max(jnp.abs(self.final_residual))
+
+
+@dataclass(frozen=True)
 class SpectreMultiVolumeSolve:
     """All packed SPECTRE volumes solved from one input summary.
 
@@ -76,6 +109,7 @@ class SpectreMultiVolumeSolve:
     summary: SpectreInputSummary
     volume_solves: tuple[SpectreVolumeSolve, ...]
     vector_potential: SpectreVectorPotential
+    global_constraint: SpectreGlobalConstraintEvaluation | None = None
 
     @property
     def residual_norms(self) -> Array:
@@ -126,6 +160,41 @@ def spectre_normalized_fluxes(summary: SpectreInputSummary) -> tuple[np.ndarray,
     return tflux, pflux
 
 
+def spectre_effective_current_profiles(summary: SpectreInputSummary) -> tuple[np.ndarray, np.ndarray]:
+    """Return SPECTRE-processed ``Ivolume`` and ``Isurf`` arrays for constraints.
+
+    SPECTRE rescales the free-boundary ``Lconstraint=3`` toroidal-current
+    profile so that ``Ivolume(Mvol) + sum(Isurf)`` equals ``curtor``. This helper
+    mirrors that input-processing side effect before global Beltrami updates.
+    """
+
+    ivolume = np.asarray(summary.physics.get("ivolume", ()), dtype=np.float64)
+    isurf = np.asarray(summary.physics.get("isurf", ()), dtype=np.float64)
+    if int(summary.constraints["lconstraint"]) != 3:
+        return ivolume, isurf
+    mvol = summary.packed_volume_count
+    if ivolume.size != mvol:
+        raise ValueError(f"Lconstraint=3 requires physics.ivolume length {mvol}; got {ivolume.size}")
+    if isurf.size < mvol - 1:
+        raise ValueError(f"Lconstraint=3 requires at least {mvol - 1} physics.isurf values; got {isurf.size}")
+    isurf = isurf[: mvol - 1]
+    if summary.is_free_boundary:
+        ivolume = ivolume.copy()
+        isurf = isurf.copy()
+        ivolume[mvol - 1] = ivolume[mvol - 2]
+        toroidal_current = ivolume[mvol - 1] + np.sum(isurf[: mvol - 1])
+        curtor = float(summary.physics.get("curtor", 0.0))
+        if abs(curtor) > 0.0:
+            if toroidal_current == 0.0:
+                raise ValueError("incompatible current profiles and nonzero curtor")
+            scale = curtor / toroidal_current
+            ivolume *= scale
+            isurf *= scale
+        elif abs(toroidal_current) > 1.0e-300:
+            raise ValueError("incompatible current profiles and zero curtor")
+    return ivolume, isurf
+
+
 def spectre_volume_flux_vector(summary: SpectreInputSummary, *, lvol: int) -> Array:
     """Return SPECTRE's two-component ``(dtflux, dpflux)`` vector for a volume."""
 
@@ -143,9 +212,32 @@ def spectre_volume_flux_vector(summary: SpectreInputSummary, *, lvol: int) -> Ar
     return jnp.asarray([dtflux * scale, dpflux * scale], dtype=jnp.float64)
 
 
+def spectre_lconstraint3_mu(summary: SpectreInputSummary, *, lvol: int) -> Array:
+    """Return SPECTRE's ``Lconstraint=3`` helicity multiplier for one volume."""
+
+    if int(summary.constraints["lconstraint"]) != 3:
+        raise ValueError("spectre_lconstraint3_mu only applies to Lconstraint=3")
+    if lvol < 1 or lvol > summary.nvol:
+        return jnp.asarray(0.0, dtype=jnp.float64)
+    tflux, _ = spectre_normalized_fluxes(summary)
+    ivolume, _ = spectre_effective_current_profiles(summary)
+    phiedge = float(summary.physics.get("phiedge", 1.0))
+    if lvol == 1:
+        denominator = tflux[0] * phiedge
+        numerator = ivolume[0]
+    else:
+        denominator = (tflux[lvol - 1] - tflux[lvol - 2]) * phiedge
+        numerator = ivolume[lvol - 1] - ivolume[lvol - 2]
+    if denominator == 0.0:
+        raise ValueError(f"cannot compute Lconstraint=3 mu for lvol={lvol}; zero toroidal-flux interval")
+    return jnp.asarray(numerator / denominator, dtype=jnp.float64)
+
+
 def _volume_mu(summary: SpectreInputSummary, *, lvol: int, mu: ArrayLike | None) -> Array:
     if mu is not None:
         return jnp.asarray(mu, dtype=jnp.float64)
+    if int(summary.constraints["lconstraint"]) == 3:
+        return spectre_lconstraint3_mu(summary, lvol=lvol)
     if lvol > summary.nvol:
         return jnp.asarray(0.0, dtype=jnp.float64)
     values = summary.constraints["mu"]
@@ -630,6 +722,231 @@ def _concat_vector_potentials(
     )
 
 
+def _solve_volume_sequence(
+    summary: SpectreInputSummary,
+    *,
+    selected: tuple[int, ...],
+    mu: Mapping[int, ArrayLike] | ArrayLike | None,
+    psi: Mapping[int, ArrayLike] | ArrayLike | None,
+    normal_field: Mapping[int, SpectreBoundaryNormalField] | SpectreBoundaryNormalField | None,
+    quadrature_size: int | None,
+    nt: int | None,
+    nz: int | None,
+    solve_local_constraints: bool,
+    max_constraint_iterations: int | None,
+    verbose: bool,
+) -> tuple[SpectreVolumeSolve, ...]:
+    volume_solves: list[SpectreVolumeSolve] = []
+    for lvol in selected:
+        volume_solves.append(
+            solve_spectre_volume_from_input(
+                summary,
+                lvol=lvol,
+                mu=_lookup_volume_override(mu, lvol=lvol),
+                psi=_lookup_volume_override(psi, lvol=lvol),
+                normal_field=_lookup_normal_field(normal_field, lvol=lvol),
+                quadrature_size=quadrature_size,
+                nt=nt,
+                nz=nz,
+                solve_local_constraints=solve_local_constraints,
+                max_constraint_iterations=max_constraint_iterations,
+                verbose=verbose,
+            )
+        )
+    return tuple(volume_solves)
+
+
+def _lconstraint3_unknowns(summary: SpectreInputSummary) -> tuple[str, ...]:
+    mvol = summary.packed_volume_count
+    unknowns = [f"dpflux_lvol{lvol}" for lvol in range(2, mvol + 1)]
+    if summary.is_free_boundary:
+        unknowns.append(f"dtflux_lvol{mvol}")
+    elif summary.igeometry == 1:
+        unknowns.append("dpflux_lvol1")
+    return tuple(unknowns)
+
+
+def _evaluate_lconstraint3_global(
+    summary: SpectreInputSummary,
+    volume_solves: tuple[SpectreVolumeSolve, ...],
+    *,
+    nt: int | None,
+    nz: int | None,
+) -> tuple[Array, Array, tuple[str, ...]]:
+    mvol = summary.packed_volume_count
+    if len(volume_solves) != mvol or tuple(solve.lvol for solve in volume_solves) != tuple(range(1, mvol + 1)):
+        raise ValueError("Lconstraint=3 global evaluation requires all packed volumes in order")
+    unknowns = _lconstraint3_unknowns(summary)
+    order = len(unknowns)
+    btheta = np.zeros((mvol, 2), dtype=np.float64)
+    dbtheta_dp = np.zeros((mvol, 2), dtype=np.float64)
+    dbtheta_dt = np.zeros((mvol, 2), dtype=np.float64)
+    geometry = build_spectre_interface_geometry(summary)
+    dof_layout = build_spectre_dof_layout(summary)
+
+    for volume_solve in volume_solves:
+        volume_map = dof_layout.volume_maps[volume_solve.lvol - 1]
+        for innout in (0, 1):
+            if volume_map.coordinate_singularity and innout == 0:
+                continue
+            if volume_map.vacuum_region and innout == 1:
+                continue
+            diagnostic = compute_spectre_btheta_mean(
+                summary,
+                lvol=volume_solve.lvol,
+                innout=innout,
+                vector_potential=volume_solve.vector_potential,
+                derivative_vector_potentials=volume_solve.derivative_vector_potentials,
+                volume_map=volume_map,
+                geometry=geometry,
+                nt=nt,
+                nz=nz,
+            )
+            btheta[volume_solve.lvol - 1, innout] = float(diagnostic.btheta)
+            if diagnostic.derivative_btheta.size > 1:
+                dbtheta_dp[volume_solve.lvol - 1, innout] = float(diagnostic.derivative_btheta[1])
+            if diagnostic.derivative_btheta.size > 0 and volume_map.vacuum_region:
+                dbtheta_dt[volume_solve.lvol - 1, innout] = float(diagnostic.derivative_btheta[0])
+
+    _, isurf = spectre_effective_current_profiles(summary)
+    residual = np.zeros((order,), dtype=np.float64)
+    jacobian = np.zeros((order, order), dtype=np.float64)
+    for interface in range(1, mvol):
+        row = interface - 1
+        residual[row] = _PI2 * (btheta[interface, 0] - btheta[interface - 1, 1]) - isurf[row]
+        jacobian[row, row] = _PI2 * dbtheta_dp[interface, 0]
+        if interface != 1:
+            jacobian[row, row - 1] = -_PI2 * dbtheta_dp[interface - 1, 1]
+
+    if summary.is_free_boundary:
+        vacuum_solve = volume_solves[-1]
+        current = compute_spectre_plasma_current(
+            summary,
+            lvol=mvol,
+            vector_potential=vacuum_solve.vector_potential,
+            derivative_vector_potentials=vacuum_solve.derivative_vector_potentials,
+            volume_map=dof_layout.volume_maps[mvol - 1],
+            innout=0,
+            nt=nt,
+            nz=nz,
+        )
+        residual[mvol - 1] = float(current.poloidal_current) - float(summary.physics.get("curpol", 0.0))
+        jacobian[mvol - 2, mvol - 1] = _PI2 * dbtheta_dt[mvol - 1, 0]
+        jacobian[mvol - 1, mvol - 2] = float(current.derivative_currents[1, 1])
+        jacobian[mvol - 1, mvol - 1] = float(current.derivative_currents[1, 0])
+    elif summary.igeometry == 1:
+        psi_values = [np.asarray(solve.psi, dtype=np.float64) for solve in volume_solves]
+        residual[mvol - 1] = sum(float(psi_value[1]) for psi_value in psi_values) - _lconstraint3_total_pflux(summary)
+        jacobian[0, mvol - 1] = -_PI2 * dbtheta_dp[0, 1]
+        jacobian[mvol - 1, :] = 1.0
+
+    return (
+        jnp.asarray(residual, dtype=jnp.float64),
+        jnp.asarray(jacobian, dtype=jnp.float64),
+        unknowns,
+    )
+
+
+def _lconstraint3_total_pflux(summary: SpectreInputSummary) -> float:
+    if summary.igeometry != 1:
+        return 0.0
+    pflux = np.asarray(summary.fluxes["pflux"], dtype=np.float64)
+    tflux = np.asarray(summary.fluxes["tflux"], dtype=np.float64)
+    reference = tflux[summary.nvol - 1]
+    if reference == 0.0:
+        raise ValueError("SPECTRE tflux(Nvol) must be nonzero")
+    return float(pflux[summary.packed_volume_count - 1] / reference * float(summary.physics.get("phiedge", 1.0)) / _PI2)
+
+
+def _apply_lconstraint3_correction(
+    summary: SpectreInputSummary,
+    volume_solves: tuple[SpectreVolumeSolve, ...],
+    correction: Array,
+) -> dict[int, Array]:
+    mvol = summary.packed_volume_count
+    updated = {solve.lvol: np.asarray(solve.psi, dtype=np.float64).copy() for solve in volume_solves}
+    correction_np = np.asarray(correction, dtype=np.float64)
+    for index, lvol in enumerate(range(2, mvol + 1)):
+        updated[lvol][1] -= correction_np[index]
+    if summary.is_free_boundary:
+        updated[mvol][0] -= correction_np[mvol - 1]
+    elif summary.igeometry == 1:
+        updated[1][1] -= correction_np[mvol - 1]
+    return {lvol: jnp.asarray(value, dtype=jnp.float64) for lvol, value in updated.items()}
+
+
+def _solve_lconstraint3_global(
+    summary: SpectreInputSummary,
+    *,
+    normal_field: Mapping[int, SpectreBoundaryNormalField] | SpectreBoundaryNormalField | None,
+    quadrature_size: int | None,
+    nt: int | None,
+    nz: int | None,
+    verbose: bool,
+) -> tuple[tuple[SpectreVolumeSolve, ...], SpectreGlobalConstraintEvaluation]:
+    selected = tuple(range(1, summary.packed_volume_count + 1))
+    initial_solves = _solve_volume_sequence(
+        summary,
+        selected=selected,
+        mu=None,
+        psi=None,
+        normal_field=normal_field,
+        quadrature_size=quadrature_size,
+        nt=nt,
+        nz=nz,
+        solve_local_constraints=False,
+        max_constraint_iterations=None,
+        verbose=verbose,
+    )
+    initial_residual, jacobian, unknowns = _evaluate_lconstraint3_global(
+        summary,
+        initial_solves,
+        nt=nt,
+        nz=nz,
+    )
+    correction = jnp.asarray(
+        np.linalg.solve(np.asarray(jacobian, dtype=np.float64), np.asarray(initial_residual, dtype=np.float64)),
+        dtype=jnp.float64,
+    )
+    if verbose:
+        print(
+            "[beltrami_jax] global Lconstraint=3 Newton "
+            f"initial_residual={float(jnp.max(jnp.abs(initial_residual))):.3e} "
+            f"step_norm={float(jnp.max(jnp.abs(correction))):.3e}"
+        )
+    psi_after = _apply_lconstraint3_correction(summary, initial_solves, correction)
+    final_solves = _solve_volume_sequence(
+        summary,
+        selected=selected,
+        mu=None,
+        psi=psi_after,
+        normal_field=normal_field,
+        quadrature_size=quadrature_size,
+        nt=nt,
+        nz=nz,
+        solve_local_constraints=False,
+        max_constraint_iterations=None,
+        verbose=verbose,
+    )
+    final_residual, _, _ = _evaluate_lconstraint3_global(
+        summary,
+        final_solves,
+        nt=nt,
+        nz=nz,
+    )
+    return (
+        final_solves,
+        SpectreGlobalConstraintEvaluation(
+            lconstraint=3,
+            unknowns=unknowns,
+            initial_residual=initial_residual,
+            jacobian=jacobian,
+            correction=correction,
+            final_residual=final_residual,
+        ),
+    )
+
+
 def solve_spectre_volumes_from_input(
     summary: SpectreInputSummary,
     *,
@@ -668,29 +985,40 @@ def solve_spectre_volumes_from_input(
     selected = tuple(range(1, summary.packed_volume_count + 1)) if volumes is None else tuple(int(v) for v in volumes)
     if any(lvol < 1 or lvol > summary.packed_volume_count for lvol in selected):
         raise ValueError(f"volumes must be within 1..{summary.packed_volume_count}; got {selected}")
-    volume_solves: list[SpectreVolumeSolve] = []
     if verbose:
         print(
             "[beltrami_jax] SPECTRE multi-volume solve "
             f"source={summary.source} volumes={selected} geometry={summary.igeometry}"
         )
-    for lvol in selected:
-        volume_solves.append(
-            solve_spectre_volume_from_input(
-                summary,
-                lvol=lvol,
-                mu=_lookup_volume_override(mu, lvol=lvol),
-                psi=_lookup_volume_override(psi, lvol=lvol),
-                normal_field=_lookup_normal_field(normal_field, lvol=lvol),
-                quadrature_size=quadrature_size,
-                nt=nt,
-                nz=nz,
-                solve_local_constraints=solve_local_constraints,
-                max_constraint_iterations=max_constraint_iterations,
-                verbose=verbose,
-            )
+    global_constraint = None
+    all_volumes = tuple(range(1, summary.packed_volume_count + 1))
+    if solve_local_constraints and int(summary.constraints["lconstraint"]) == 3 and selected:
+        if selected != all_volumes:
+            raise ValueError("Lconstraint=3 global solve requires all packed volumes")
+        if mu is not None or psi is not None:
+            raise ValueError("Lconstraint=3 global solve computes mu/psi from SPECTRE profiles; do not pass overrides")
+        solves_tuple, global_constraint = _solve_lconstraint3_global(
+            summary,
+            normal_field=normal_field,
+            quadrature_size=quadrature_size,
+            nt=nt,
+            nz=nz,
+            verbose=verbose,
         )
-    solves_tuple = tuple(volume_solves)
+    else:
+        solves_tuple = _solve_volume_sequence(
+            summary,
+            selected=selected,
+            mu=mu,
+            psi=psi,
+            normal_field=normal_field,
+            quadrature_size=quadrature_size,
+            nt=nt,
+            nz=nz,
+            solve_local_constraints=solve_local_constraints,
+            max_constraint_iterations=max_constraint_iterations,
+            verbose=verbose,
+        )
     vector_potential = _concat_vector_potentials(solves_tuple, source=summary.source)
     if verbose:
         print(
@@ -703,6 +1031,7 @@ def solve_spectre_volumes_from_input(
         summary=summary,
         volume_solves=solves_tuple,
         vector_potential=vector_potential,
+        global_constraint=global_constraint,
     )
 
 

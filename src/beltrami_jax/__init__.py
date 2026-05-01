@@ -48,8 +48,10 @@ from .spectre_constraints import (
     spectre_local_unknown_count,
 )
 from .spectre_diagnostics import (
+    SpectreBThetaMeanDiagnostic,
     SpectrePlasmaCurrentDiagnostic,
     SpectreRotationalTransformDiagnostic,
+    compute_spectre_btheta_mean,
     compute_spectre_plasma_current,
     compute_spectre_rotational_transform,
 )
@@ -104,11 +106,14 @@ from .spectre_volume_matrix import (
     assemble_spectre_volume_matrices_from_input,
 )
 from .spectre_solve import (
+    SpectreGlobalConstraintEvaluation,
     SpectreMultiVolumeSolve,
     SpectreVolumeSolve,
     solve_spectre_toml,
     solve_spectre_volume_from_input,
     solve_spectre_volumes_from_input,
+    spectre_effective_current_profiles,
+    spectre_lconstraint3_mu,
     spectre_normalized_fluxes,
     spectre_volume_flux_vector,
 )
@@ -184,10 +189,12 @@ __all__ = [
     "SpectreBackendSolve",
     "SpectreBackendTiming",
     "SpectreBeltramiBranchSolve",
+    "SpectreBThetaMeanDiagnostic",
     "SpectreConstraintDiagnostics",
     "SpectreConstraintEvaluation",
     "SpectreConstraintTargets",
     "SpectreCoordinateGrid",
+    "SpectreGlobalConstraintEvaluation",
     "SpectreLocalConstraintEvaluation",
     "SpectreVolumeBlock",
     "SpectreVolumeDofMap",
@@ -230,6 +237,7 @@ __all__ = [
     "collocation_grid",
     "compare_against_reference",
     "compare_vector_potentials",
+    "compute_spectre_btheta_mean",
     "compute_spectre_plasma_current",
     "compute_spectre_rotational_transform",
     "compute_solve_diagnostics",
@@ -284,8 +292,10 @@ __all__ = [
     "spectre_constraint_dof_count",
     "spectre_default_angular_grid",
     "spectre_default_quadrature_size",
+    "spectre_effective_current_profiles",
     "spectre_fourier_modes",
     "spectre_integral_mode_labels",
+    "spectre_lconstraint3_mu",
     "spectre_mode_count",
     "spectre_normalized_fluxes",
     "spectre_radial_basis_at_quadrature",

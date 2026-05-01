@@ -28,7 +28,7 @@ What currently works:
 
 What is not yet done:
 
-- It does not yet run the full global/semi-global constraint loop that updates `mu`, `dtflux`, and `dpflux` without SPECTRE metadata injection.
+- It does not yet validate the free-boundary global constraint loop without SPECTRE normal-field metadata injection.
 - It does not yet cover non-stellarator-symmetric transform/current diagnostic branches.
 - It does not yet cover enough non-stellarator-symmetric and high-resolution fixtures to claim full SPECTRE backend replacement.
 - The docs have been tightened, but must continue to avoid claiming SPECTRE backend replacement before JAX-native coefficient parity exists.
@@ -36,7 +36,7 @@ What is not yet done:
 Recommended immediate direction:
 
 - Treat `beltrami_jax` as a strict SPECTRE Beltrami backend project, not as a loosely similar Beltrami solver.
-- Next implement global/semi-global `Lconstraint=3` and broaden transform/current diagnostics beyond the first validated stellarator-symmetric local branch.
+- Next validate free-boundary `Lconstraint=3` without injected SPECTRE normal-field state and broaden transform/current diagnostics beyond the first validated stellarator-symmetric local branch.
 - Only after post-constraint coefficient parity is established for the remaining branches should we attempt a default SPECTRE fork replacement branch.
 
 ## 2. Direct Answers to the Collaborator's Email
@@ -67,9 +67,9 @@ Final target input contract:
 
 Current `beltrami_jax` answer:
 
-- Yes for the SPECTRE IO/validation contract, for validated per-volume JAX-assembled solves when supplied the post-constraint SPECTRE branch state, and for the packaged local `Lconstraint=1` branch from TOML initial state.
+- Yes for the SPECTRE IO/validation contract, for validated per-volume JAX-assembled solves when supplied the post-constraint SPECTRE branch state, for the packaged local `Lconstraint=1` branch from TOML initial state, and for the packaged fixed-boundary `Lconstraint=3` branch from TOML initial state.
 - `beltrami_jax` now loads SPECTRE `reference.h5` vector-potential datasets and compares them to fresh SPECTRE exports from `spectre.get_vec_pot_flat`.
-- The JAX-native SPECTRE path can now assemble and unpack per-volume coefficients; the remaining blocker is computing global/semi-global post-constraint branch states without SPECTRE injection.
+- The JAX-native SPECTRE path can now assemble and unpack per-volume coefficients; the remaining blocker is computing free-boundary global post-constraint branch states without SPECTRE normal-field injection and broadening branch coverage.
 - Existing dense validation compares to linear systems dumped from an instrumented local SPEC build and now also to released SPECTRE per-volume linear-system exports: operator, RHS, and solved degree-of-freedom vector.
 
 SPECTRE assessment:
@@ -1130,9 +1130,9 @@ Important design decision:
 
 Current remaining blockers:
 
-- Port `magnetic_field_mod.F90::compute_rotational_transform` to JAX and validate `iota` plus derivative rows against SPECTRE dumps.
-- Add the `Lconstraint=1` local Newton loop once rotational-transform diagnostics are available.
-- Add the global/semi-global `Lconstraint=3` force-coupled updates.
+- Regenerate the SPECTRE force-seam panel now that the packaged `Lconstraint=1` and fixed-boundary `Lconstraint=3` branches have JAX-native closure paths.
+- Validate the free-boundary `Lconstraint=3` force-coupled update without injected SPECTRE normal-field state.
+- Broaden non-stellarator-symmetric transform/current diagnostic coverage.
 - Rebuild SPECTRE with `set_vec_pot`, run `SPECTRE.solve_beltrami_jax(update_fortran=True)`, and compare injected coefficients, Beltrami errors, force modes, and downstream field diagnostics against the Fortran backend.
 - Add a real backend flag in SPECTRE only after those validation plots are at roundoff-level agreement.
 
@@ -1188,15 +1188,16 @@ Interpretation:
 
 - The SPECTRE injection mechanism is validated.
 - The force backend switch reaches roundoff-level agreement for a branch whose nonlinear local constraint is now represented in `beltrami_jax`.
-- The two non-roundoff force comparisons are not injection failures. They identify the remaining planned SPEC-removal work:
-  - `Lconstraint=1` needs JAX-native rotational-transform diagnostics.
-  - `Lconstraint=3` needs the SPECTRE global/semi-global flux update.
+- The two non-roundoff force comparisons were not injection failures. They identified missing work that has since been partly closed:
+  - `Lconstraint=1` now has a validated JAX-native transform closure for the packaged stellarator-symmetric branch.
+  - fixed-boundary `Lconstraint=3` now has a validated global-current closure for the packaged fixed-boundary branch.
+  - both SPECTRE seam force measurements must be regenerated with `solve_local_constraints=True`.
 
 Current PR readiness status:
 
 - Ready for an internal experimental branch and reviewer discussion of the adapter seam.
 - Not ready for a claim that SPEC/SPECTRE Beltrami is fully removed.
-- The next implementation lane must target `magnetic_field_mod.F90::compute_rotational_transform` and the `Lconstraint=3` global update before changing SPECTRE defaults.
+- The next implementation lane must regenerate the SPECTRE force-seam validation and target free-boundary `Lconstraint=3` plus broader branch coverage before changing SPECTRE defaults.
 
 ## 19. 2026-04-30 Progress: Local Lconstraint=1 Transform Closure in JAX
 
@@ -1242,7 +1243,7 @@ Updated interpretation:
 - That force-seam figure should now be regenerated from the local SPECTRE fork using `solve_local_constraints=True`.
 - `Lconstraint=1` is no longer the main missing local branch for the validated stellarator-symmetric Fourier path.
 - The primary SPEC-removal blockers are now:
-  - global/semi-global `Lconstraint=3`;
+  - free-boundary global `Lconstraint=3` without injected normal-field state;
   - non-stellarator-symmetric transform/current branches;
   - broader high-resolution 3D fixture coverage;
   - production sparse/matrix-free scaling.
@@ -1251,3 +1252,44 @@ Immediate next SPECTRE-fork task:
 
 - Update/run the local SPECTRE backend switch so `force_real(..., beltrami_backend="jax", solve_local_constraints=True)` uses the new transform closure for `G2V32L1Fi`.
 - Regenerate `docs/_static/spectre_backend_seam_runtime.png` if the force comparison improves to roundoff.
+
+## 20. 2026-04-30 Progress: Fixed-Boundary Lconstraint=3 Global-Current Closure
+
+New completed ingredients in `beltrami_jax`:
+
+- Added `SpectreBThetaMeanDiagnostic` and `compute_spectre_btheta_mean`.
+  - Ports the SPECTRE `plasma_current_mod.F90::lbpol` mean covariant `B_theta` diagnostic.
+  - Evaluates endpoint vector-potential derivatives, lowers the field with the SPECTRE metric, and returns the `(0,0)` angular Fourier coefficient plus derivative rows.
+- Added SPECTRE `Lconstraint=3` profile preprocessing.
+  - `spectre_effective_current_profiles` mirrors SPECTRE free-boundary current-profile rescaling.
+  - `spectre_lconstraint3_mu` recomputes branch `mu` from `Ivolume`, normalized `tflux`, and `phiedge`, matching `preset_mod.F90`.
+- Added fixed-boundary global-current Newton support to `solve_spectre_volumes_from_input(..., solve_local_constraints=True)`.
+  - The global unknown ordering is `dpflux_lvol2`, ..., `dpflux_lvolM`.
+  - The residual is `2*pi*(Btheta_inner(next volume) - Btheta_outer(previous volume)) - Isurf`.
+  - The Jacobian is assembled from the derivative vector-potential solves with respect to `dpflux`, matching the `forces_mod.F90::dfp100` coupling pattern.
+- Added reviewer-facing validation assets:
+  - `docs/_static/spectre_lconstraint3_global.png`.
+  - `docs/_static/spectre_lconstraint3_global_summary.json`.
+  - Generator: `tools/generate_spectre_lconstraint3_validation_assets.py`.
+
+Validation result:
+
+- Case: `G3V3L3Fi`, public SPECTRE compare case.
+- Input mode: TOML initial state, not injected post-constraint `mu`/`psi`.
+- Branch: fixed-boundary `Lconstraint=3`.
+- Initial global residual infinity norm: `2.304e-04`.
+- Final global residual infinity norm after one Newton correction: `6.621e-17`.
+- Worst post-constraint `mu`/`psi` state error versus released SPECTRE fixtures: `4.719e-17`.
+- Global `Ate/Aze/Ato/Azo` coefficient relative error versus SPECTRE `reference.h5`: `1.683e-14`.
+
+Updated interpretation:
+
+- The fixed-boundary public `Lconstraint=3` branch no longer needs injected SPECTRE post-constraint metadata for coefficient parity.
+- Remaining `Lconstraint=3` work is now concentrated on the free-boundary case, where exact parity also depends on the live Picard-updated normal-field source arrays.
+- The SPECTRE fork seam should now be regenerated for `G3V3L3Fi` with `solve_local_constraints=True`; the previous `1.67e-3` force-seam mismatch predates this global-current closure.
+
+Immediate next SPECTRE-fork task:
+
+- Re-run `force_real(..., beltrami_backend="jax", solve_local_constraints=True)` for `G3V3L3Fi`.
+- If the force comparison reaches roundoff, regenerate `docs/_static/spectre_backend_seam_runtime.png`.
+- Then target the free-boundary `G3V8L3Free` global branch with explicit updated-normal-field plumbing or a JAX-native free-boundary normal-field update.

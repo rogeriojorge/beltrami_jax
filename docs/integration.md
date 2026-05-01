@@ -127,8 +127,10 @@ Current supported use:
 - return SPECTRE branch derivative solutions, derivative residuals, magnetic energy, and magnetic helicity from the backend solve
 - compute SPECTRE-style plasma/linking current diagnostics from solved `Ate/Aze/Ato/Azo` coefficients
 - compute SPECTRE-style Fourier rotational-transform diagnostics from solved `Ate/Aze/Ato/Azo` coefficients for validated stellarator-symmetric `Lsparse=0/3` branches
+- compute SPECTRE-style `lbpol` mean covariant `B_theta` diagnostics from solved `Ate/Aze/Ato/Azo` coefficients
 - solve local zero-unknown branches and the JAX-native `Lconstraint=2` plasma helicity branch from TOML data
 - evaluate local Newton updates for the `Lconstraint=-2` plasma current, `Lconstraint=0` vacuum current, and `Lconstraint=1` rotational-transform branches when those branches are present in input data
+- solve the fixed-boundary `Lconstraint=3` global-current branch from TOML initial state with coupled `dpflux` updates
 - load packaged public SPECTRE compare cases for reproducible CI validation
 - reconstruct SPECTRE's internal Fourier mode order and packed radial block layout
 - pack and unpack SPECTRE-compatible per-volume solution vectors to/from `Ate`, `Aze`, `Ato`, and `Azo`
@@ -164,6 +166,8 @@ Current safe entry points:
 - `assemble_spectre_matrix_ad_from_input`
 - `assemble_spectre_volume_matrices_from_input`
 - `spectre_volume_flux_vector`
+- `spectre_lconstraint3_mu`
+- `spectre_effective_current_profiles`
 - `solve_spectre_volume_from_input`
 - `solve_spectre_volumes_from_input`
 - `solve_spectre_toml`
@@ -177,6 +181,7 @@ Current safe entry points:
 - `solve_spectre_assembled_batch`
 - `solve_spectre_beltrami_branch`
 - `evaluate_spectre_constraints`
+- `compute_spectre_btheta_mean`
 
 Prototype-only entry points:
 
@@ -284,9 +289,10 @@ result = solve_spectre_volumes_from_input(case.input_summary, mu=mu, psi=psi)
 
 The explicit `mu`/`psi` injection remains useful for strict linear parity tests
 and for branches whose nonlinear updates are not yet ported. It is no longer
-required for the packaged local `Lconstraint=1` transform branch or the local
+required for the packaged local `Lconstraint=1` transform branch, the
+fixed-boundary `Lconstraint=3` global-current branch, or the local
 helicity/current branches covered by `solve_local_constraints=True`. The
-remaining backend work is the global/semi-global update path and broader
+remaining backend work is free-boundary global validation and broader
 diagnostic branch coverage.
 
 ## SPECTRE pack/unpack workflow
@@ -446,10 +452,11 @@ print(result.constraint.residual_norm)
 The local-constraint path currently covers zero-unknown branches,
 `Lconstraint=2` plasma helicity, `Lconstraint=-2` plasma current,
 `Lconstraint=0` vacuum current, and local `Lconstraint=1` rotational transform
-for the validated stellarator-symmetric Fourier branch. Full SPECTRE parity
-still needs the global/semi-global force-coupled updates used by
-`Lconstraint=3` and broader non-stellarator-symmetric transform/current
-coverage.
+for the validated stellarator-symmetric Fourier branch. The multi-volume path
+also covers the fixed-boundary `Lconstraint=3` global-current branch for the
+public `G3V3L3Fi` case. Full SPECTRE parity still needs the free-boundary
+global-current branch without injected normal-field state and broader
+non-stellarator-symmetric transform/current coverage.
 
 ## SPECTRE linear-system validation workflow
 
@@ -659,8 +666,7 @@ Runtime seam validation from the local SPECTRE rebuild:
 
 - `G3V3L3Fi` coefficient injection has relative copy error `0.0` after `SPECTRE.solve_beltrami_jax(update_fortran=True)`.
 - `G3V3L2Fi_stability` reaches `1.25e-12` relative force agreement through `force_real(..., beltrami_backend="jax")`.
-- `G3V3L3Fi` remains at `1.67e-3` relative force error because the `Lconstraint=3` global/semi-global flux update is still open.
-- `G2V32L1Fi` is expected to improve once the SPECTRE fork calls the new JAX local transform closure instead of the older coefficient-injection seam measured before this diagnostic existed.
+- The `G3V3L3Fi` and `G2V32L1Fi` force-seam measurements in the static panel predate the new `solve_local_constraints=True` closures and must be regenerated from the SPECTRE fork.
 
 ![SPECTRE backend seam runtime validation](_static/spectre_backend_seam_runtime.png)
 
@@ -673,6 +679,6 @@ Performance notes:
 
 ## Current boundary
 
-The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, SPECTRE matrix assembly, TOML-driven per-volume coefficient solves, SPECTRE current diagnostics, the validated local rotational-transform diagnostic, and the first local constraint updates. It is still not a complete SPECTRE backend because the global/semi-global force-coupled constraint updates and broader branch coverage are still open.
+The integration boundary is strong enough to ship for the supported assembled-system, prototype internal-geometry, SPECTRE coefficient-validation, SPECTRE solution-vector packing, SPECTRE interface-geometry evaluation, SPECTRE matrix assembly, TOML-driven per-volume coefficient solves, SPECTRE current diagnostics, the validated local rotational-transform diagnostic, local constraint updates, and fixed-boundary `Lconstraint=3` global-current closure. It is still not a complete SPECTRE backend because free-boundary global validation and broader branch coverage are still open.
 
 See the root-level `SPECTRE_MIGRATION_PLAN.md` for the current SPECTRE replacement plan.

@@ -72,6 +72,22 @@ class SpectreRotationalTransformDiagnostic:
     lvol: int = 0
 
 
+@dataclass(frozen=True)
+class SpectreBThetaMeanDiagnostic:
+    """SPECTRE ``lbpol`` interface-averaged covariant ``B_theta`` diagnostic.
+
+    ``btheta`` is the Fourier ``(m,n)=(0,0)`` coefficient returned by SPECTRE
+    ``plasma_current_mod.F90::lbpol``. ``derivative_btheta[j]`` uses the same
+    derivative vector-potential block ordering returned by the Beltrami solve:
+    plasma ``(mu, dpflux)`` or vacuum ``(dtflux, dpflux)``.
+    """
+
+    lvol: int
+    innout: int
+    btheta: Array
+    derivative_btheta: Array
+
+
 def _endpoint_basis(
     *,
     lrad: int,
@@ -350,6 +366,95 @@ def _plasma_current_from_vector_potential(
             jnp.mean(current_poloidal_integrand),
         ),
         dtype=jnp.float64,
+    )
+
+
+def _btheta_mean_from_vector_potential(
+    vector_potential: SpectreVectorPotential,
+    *,
+    summary: SpectreInputSummary,
+    geometry: SpectreInterfaceGeometry,
+    volume_map: SpectreVolumeDofMap,
+    lvol: int,
+    innout: int,
+    theta: Array,
+    zeta: Array,
+) -> Array:
+    volume = interpolate_spectre_volume_geometry(geometry, lvol=lvol, s=2.0 * float(innout) - 1.0)
+    grid = evaluate_spectre_volume_coordinates(volume, theta=theta, zeta=zeta)
+    _, bsupt, bsupz = _boundary_fields(
+        vector_potential,
+        volume_map=volume_map,
+        theta=theta,
+        zeta=zeta,
+        innout=innout,
+        include_radial_field=False,
+    )
+    metric = grid.metric
+    btheta = (-bsupt * metric[..., 1, 1] + bsupz * metric[..., 1, 2]) * grid.inverse_jacobian
+    return jnp.mean(btheta)
+
+
+def compute_spectre_btheta_mean(
+    summary: SpectreInputSummary,
+    *,
+    lvol: int,
+    innout: int,
+    vector_potential: SpectreVectorPotential,
+    derivative_vector_potentials: tuple[SpectreVectorPotential, ...] = (),
+    volume_map: SpectreVolumeDofMap | None = None,
+    geometry: SpectreInterfaceGeometry | None = None,
+    nt: int | None = None,
+    nz: int | None = None,
+) -> SpectreBThetaMeanDiagnostic:
+    """Compute SPECTRE ``lbpol`` mean covariant ``B_theta`` on one interface."""
+
+    if lvol < 1 or lvol > summary.packed_volume_count:
+        raise ValueError(f"lvol={lvol} outside 1..{summary.packed_volume_count}")
+    if innout not in (0, 1):
+        raise ValueError(f"innout must be 0 or 1, got {innout}")
+    if volume_map is None:
+        volume_map = build_spectre_dof_layout(summary).volume_maps[lvol - 1]
+    if geometry is None:
+        geometry = build_spectre_interface_geometry(summary)
+    if nt is None or nz is None:
+        default_nt, default_nz = spectre_default_angular_grid(summary)
+        nt = default_nt if nt is None else nt
+        nz = default_nz if nz is None else nz
+    theta = jnp.arange(int(nt), dtype=jnp.float64) * (_PI2 / int(nt))
+    zeta = jnp.arange(int(nz), dtype=jnp.float64) * (_PI2 / (summary.nfp * int(nz)))
+
+    value = _btheta_mean_from_vector_potential(
+        vector_potential,
+        summary=summary,
+        geometry=geometry,
+        volume_map=volume_map,
+        lvol=lvol,
+        innout=innout,
+        theta=theta,
+        zeta=zeta,
+    )
+    derivatives = jnp.asarray(
+        [
+            _btheta_mean_from_vector_potential(
+                derivative_vector_potential,
+                summary=summary,
+                geometry=geometry,
+                volume_map=volume_map,
+                lvol=lvol,
+                innout=innout,
+                theta=theta,
+                zeta=zeta,
+            )
+            for derivative_vector_potential in derivative_vector_potentials
+        ],
+        dtype=jnp.float64,
+    ) if derivative_vector_potentials else jnp.zeros((0,), dtype=jnp.float64)
+    return SpectreBThetaMeanDiagnostic(
+        lvol=lvol,
+        innout=innout,
+        btheta=value,
+        derivative_btheta=derivatives,
     )
 
 

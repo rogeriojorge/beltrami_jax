@@ -2022,5 +2022,95 @@ Current next lane:
 
 - Re-run the SPECTRE fork `force_real(..., beltrami_backend="jax", solve_local_constraints=True)` on `G2V32L1Fi` using the new transform closure.
 - If that force comparison reaches roundoff, update `docs/_static/spectre_backend_seam_runtime.png`.
-- Implement the `Lconstraint=3` global/semi-global update path.
+- Validate the remaining free-boundary `Lconstraint=3` global update path without injected SPECTRE normal-field state.
 - Add non-stellarator-symmetric transform/current fixtures before claiming full backend parity.
+
+## 27. 2026-04-30 Addendum: Fixed-Boundary Lconstraint=3 Global-Current Closure
+
+Goal of this lane:
+
+- Continue the SPECTRE/SPEC removal plan by closing the public fixed-boundary `Lconstraint=3` branch without injected post-constraint SPECTRE `mu`/`psi` metadata.
+- Port the SPECTRE mean covariant `B_theta` diagnostic used by `plasma_current_mod.F90::lbpol`.
+- Reproduce the fixed-boundary global-current Newton correction pattern used by `forces_mod.F90::dfp100`.
+- Generate a reviewer-facing validation figure showing residual closure, post-constraint state parity, and coefficient parity.
+
+Files added:
+
+- `tools/generate_spectre_lconstraint3_validation_assets.py`
+  - Solves the public `G3V3L3Fi` case from TOML initial state with `solve_local_constraints=True`.
+  - Compares JAX-updated `dpflux`, `mu`, `psi`, linear residuals, and full `Ate/Aze/Ato/Azo` coefficients to the released SPECTRE fixtures.
+  - Writes `docs/_static/spectre_lconstraint3_global.png` and `docs/_static/spectre_lconstraint3_global_summary.json`.
+- `docs/_static/spectre_lconstraint3_global.png`
+  - Four-panel validation plot for future documentation and SPECTRE PR discussion.
+- `docs/_static/spectre_lconstraint3_global_summary.json`
+  - Machine-readable validation summary containing the residual, state, and coefficient parity numbers.
+
+Files modified:
+
+- `src/beltrami_jax/spectre_input.py`
+  - Adds `ivolume` and `isurf` to `SpectreInputSummary.constraints` for branch-state inspection and docs-facing summaries.
+- `src/beltrami_jax/spectre_diagnostics.py`
+  - Adds `SpectreBThetaMeanDiagnostic`.
+  - Adds `compute_spectre_btheta_mean`.
+  - Implements the endpoint field evaluation, metric lowering, inverse-Jacobian scaling, angular averaging, and derivative-vector-potential rows needed by SPECTRE `lbpol`.
+- `src/beltrami_jax/spectre_solve.py`
+  - Adds `SpectreGlobalConstraintEvaluation`.
+  - Adds `global_constraint` metadata to `SpectreMultiVolumeSolve`.
+  - Adds `spectre_effective_current_profiles`, matching SPECTRE current-profile preprocessing and free-boundary current rescaling rules.
+  - Adds `spectre_lconstraint3_mu`, matching SPECTRE `preset_mod.F90` recomputation of `mu` from `Ivolume`, normalized toroidal flux, and `phiedge`.
+  - Adds the coupled fixed-boundary `Lconstraint=3` solve path under `solve_spectre_volumes_from_input(..., solve_local_constraints=True)`.
+  - Uses global unknown ordering `dpflux_lvol2`, ..., `dpflux_lvolM` for fixed-boundary cases.
+  - Builds residuals as `2*pi*(Btheta_inner(next volume) - Btheta_outer(previous volume)) - Isurf`.
+  - Builds the Jacobian from branch derivative solves with respect to the coupled poloidal-flux increments.
+- `src/beltrami_jax/__init__.py`
+  - Exports the new diagnostic, global-constraint record, and `Lconstraint=3` helper APIs.
+- `tests/test_spectre_volume_matrix.py`
+  - Adds `spectre_lconstraint3_mu` parity against released fixture metadata for `G3V3L3Fi` and `G3V8L3Free`.
+  - Adds direct `compute_spectre_btheta_mean` coverage on a solved SPECTRE coefficient block.
+  - Adds a full TOML-initial-state fixed-boundary `Lconstraint=3` global solve test for `G3V3L3Fi`, including final global residual and coefficient parity.
+- `README.md`, `docs/overview.md`, `docs/theory.md`, `docs/integration.md`, `docs/validation.md`, `docs/limitations.md`, `SPECTRE_MIGRATION_PLAN.md`
+  - Document that fixed-boundary `Lconstraint=3` is now implemented and validated.
+  - Clarify that free-boundary `Lconstraint=3` validation without injected normal-field state remains open.
+  - Add the new validation figure and numerical highlights.
+
+What worked:
+
+- `spectre_lconstraint3_mu` matches released SPECTRE fixture `mu` values for both the fixed-boundary `G3V3L3Fi` and free-boundary `G3V8L3Free` packaged cases.
+- The `G3V3L3Fi` fixed-boundary global solve now starts from TOML initial state, not from injected SPECTRE post-constraint `mu`/`psi` values.
+- The global Newton correction reproduces the released SPECTRE post-constraint state at roundoff.
+- The validation panel reports:
+  - initial global residual infinity norm: `2.304e-04`;
+  - final global residual infinity norm: `6.621e-17`;
+  - worst post-constraint `mu`/`psi` state error: `4.719e-17`;
+  - global `Ate/Aze/Ato/Azo` coefficient relative error: `1.683e-14`.
+- The targeted tests for the new lane passed:
+  - `./.venv/bin/python -m pytest tests/test_spectre_volume_matrix.py::test_spectre_lconstraint3_mu_matches_released_fixture_metadata tests/test_spectre_volume_matrix.py::test_spectre_btheta_mean_diagnostic_feeds_lconstraint3_global_system tests/test_spectre_volume_matrix.py::test_toml_multi_volume_lconstraint3_global_solve_matches_reference_without_state_injection -q -o addopts=''`
+  - result: `3 passed in 69.21s`.
+- The broader SPECTRE matrix/constraint subset passed:
+  - `./.venv/bin/python -m pytest tests/test_spectre_volume_matrix.py tests/test_spectre_constraints.py -q -o addopts=''`
+  - result: `43 passed in 261.62s`.
+- The full local release-gate suite passed after adding branch-coverage tests for the new helpers:
+  - `./.venv/bin/python -m pytest`
+  - result: `123 passed in 476.38s`, total coverage `90.50%`.
+- Strict documentation build passed:
+  - `./.venv/bin/python -m sphinx -W --keep-going -b html docs docs/_build/html`
+- Package build passed:
+  - `./.venv/bin/python -m build`
+  - built `beltrami_jax-0.1.0.tar.gz` and `beltrami_jax-0.1.0-py3-none-any.whl`.
+
+Design decisions:
+
+- The public fixed-boundary branch is enabled through the existing high-level API, `solve_spectre_volumes_from_input(summary, solve_local_constraints=True)`, so examples and future SPECTRE integration do not need a branch-specific entry point.
+- The fixed-boundary `Lconstraint=3` path rejects selected-volume subsets because the residual couples adjacent volume interfaces and therefore requires all packed volumes in order.
+- The fixed-boundary `Lconstraint=3` path rejects explicit `mu`/`psi` overrides when `solve_local_constraints=True`, because this branch is meant to compute the SPECTRE post-constraint state from input profiles.
+- Free-boundary and cylindrical-global code paths are scaffolded in the residual/Jacobian helper, but only the fixed-boundary public `G3V3L3Fi` branch is claimed as validated here.
+- The first implementation uses dense linear algebra for the small global Newton system, consistent with current SPECTRE validation sizes. Sparse or matrix-free production scaling remains a separate performance lane.
+
+What remains:
+
+- Re-run the local SPECTRE fork seam on `G3V3L3Fi` with `solve_local_constraints=True` and regenerate the backend-seam validation panel if the force agreement reaches roundoff.
+- Validate the free-boundary `G3V8L3Free` global `Lconstraint=3` branch without relying on SPECTRE-injected updated normal-field source arrays.
+- Add JAX-native free-boundary normal-field update support or an explicit SPECTRE adapter seam for those live Picard-updated arrays.
+- Broaden non-stellarator-symmetric transform/current diagnostic coverage.
+- Add higher-resolution and more strongly shaped public SPECTRE fixtures before claiming full backend replacement.
+- Add production sparse or matrix-free solves after branch parity is stable.
